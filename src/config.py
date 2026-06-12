@@ -1,10 +1,21 @@
+import shutil
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
-DEFAULT_CONFIG_PATH = PROJECT_ROOT / "config.yaml"
+if getattr(sys, "frozen", False):
+    # PyInstaller bundle: writable data (config, logs) lives next to the exe,
+    # read-only bundled assets (static/, config template) live in _MEIPASS.
+    APP_ROOT = Path(sys.executable).resolve().parent
+    BUNDLE_ROOT = Path(getattr(sys, "_MEIPASS", str(APP_ROOT)))
+else:
+    APP_ROOT = Path(__file__).resolve().parent.parent
+    BUNDLE_ROOT = APP_ROOT
+
+PROJECT_ROOT = APP_ROOT
+DEFAULT_CONFIG_PATH = APP_ROOT / "config.yaml"
 
 MIN_PING_INTERVAL_SECONDS = 0.1
 MAX_PING_INTERVAL_SECONDS = 3600.0
@@ -71,11 +82,11 @@ def load_config(path: Path | None = None) -> Config:
 
     log_file = Path(raw["log_file"])
     if not log_file.is_absolute():
-        log_file = PROJECT_ROOT / log_file
+        log_file = APP_ROOT / log_file
 
     archive_dir = Path(raw.get("archive_dir", "logs/archive"))
     if not archive_dir.is_absolute():
-        archive_dir = PROJECT_ROOT / archive_dir
+        archive_dir = APP_ROOT / archive_dir
 
     max_log_size_mb = float(raw.get("max_log_size_mb", 1))
     max_log_size_bytes = max(1, int(max_log_size_mb * 1024 * 1024))
@@ -136,3 +147,15 @@ def save_config(config: Config, path: Path | None = None) -> None:
     }
     with config_path.open("w", encoding="utf-8") as handle:
         yaml.safe_dump(data, handle, sort_keys=False, allow_unicode=True)
+
+
+def ensure_user_config() -> None:
+    """Seed a user-editable config next to the app on first run and create log dirs."""
+    if not DEFAULT_CONFIG_PATH.exists():
+        bundled_template = BUNDLE_ROOT / "config.yaml"
+        if bundled_template.exists() and bundled_template != DEFAULT_CONFIG_PATH:
+            shutil.copyfile(bundled_template, DEFAULT_CONFIG_PATH)
+
+    config = load_config()
+    config.log_file.parent.mkdir(parents=True, exist_ok=True)
+    config.archive_dir.mkdir(parents=True, exist_ok=True)

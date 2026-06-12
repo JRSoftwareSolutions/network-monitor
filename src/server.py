@@ -3,12 +3,14 @@ import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
+import uvicorn
 from fastapi import FastAPI, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from src.config import (
+    BUNDLE_ROOT,
     MAX_HIDDEN_POLL_MULTIPLIER,
     MAX_LOG_AGE_MINUTES,
     MAX_PING_INTERVAL_SECONDS,
@@ -17,7 +19,6 @@ from src.config import (
     MIN_LOG_AGE_MINUTES,
     MIN_PING_INTERVAL_SECONDS,
     MIN_REFRESH_SECONDS,
-    PROJECT_ROOT,
     clamp_hidden_poll_multiplier,
     clamp_log_age_minutes,
     clamp_ping_interval_seconds,
@@ -48,7 +49,7 @@ from src.metrics import (
 from src.network_info import get_active_connection
 from src.ping_monitor import PingMonitor
 
-STATIC_DIR = PROJECT_ROOT / "static"
+STATIC_DIR = BUNDLE_ROOT / "static"
 
 config = load_config()
 monitor = PingMonitor(
@@ -320,17 +321,20 @@ async def api_metrics(
     )
 
 
-def main() -> None:
-    import uvicorn
-
-    uvicorn.run(
-        "src.server:app",
-        host=config.server_host,
-        port=config.server_port,
-        reload=False,
+def create_server(host: str, port: int) -> uvicorn.Server:
+    """Build a uvicorn server that can be stopped by setting `should_exit`."""
+    uv_config = uvicorn.Config(
+        app,
+        host=host,
+        port=port,
         access_log=False,
         log_level="warning",
     )
+    return uvicorn.Server(uv_config)
+
+
+def main() -> None:
+    create_server(config.server_host, config.server_port).run()
 
 
 if __name__ == "__main__":

@@ -27,6 +27,21 @@ Open [http://127.0.0.1:8080](http://127.0.0.1:8080) in your browser.
 
 The monitor starts automatically when the server starts. One JSON sample is written per ping interval.
 
+## Standalone exe (Windows)
+
+Build a double-clickable desktop app — the machine that runs it does not need Python:
+
+1. Double-click **`build.bat`** (or run it from a terminal). It installs the build dependencies into `.venv` and runs PyInstaller.
+2. Copy the output folder `dist\NetworkMonitor\` anywhere you like.
+3. Double-click `NetworkMonitor.exe`. The dashboard opens in its own window; closing the window shuts down the server and ping monitor cleanly.
+
+Notes:
+
+- On first run, an editable `config.yaml` and a `logs\` folder are created next to the exe and persist across restarts.
+- Requires the Microsoft WebView2 runtime (preinstalled on Windows 10/11).
+- The dashboard loads Chart.js and fonts from CDNs, so it needs internet access to render charts.
+- To try the desktop window from source without building: `pip install -r requirements-build.txt`, then `python -m src.desktop`.
+
 ## Configuration
 
 Edit [`config.yaml`](config.yaml):
