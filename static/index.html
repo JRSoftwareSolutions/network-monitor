@@ -365,8 +365,15 @@
           <p class="panel-subtitle">Per-ping round trip time with ±jitter band — failed pings shown as red strips</p>
         </div>
       </div>
-      <div class="chart-wrap">
+      <div class="chart-wrap chart-wrap--latency">
         <canvas id="latency-chart"></canvas>
+      </div>
+      <div class="chart-meta mono" aria-hidden="true">
+        <span class="chart-legend">
+          <span class="legend-item"><i class="legend-dot legend-dot--latency-line"></i>latency</span>
+          <span class="legend-item"><i class="legend-dot legend-dot--jitter-band"></i>± jitter</span>
+          <span class="legend-item"><i class="legend-dot legend-dot--fail"></i>failed ping</span>
+        </span>
       </div>
     </section>
 

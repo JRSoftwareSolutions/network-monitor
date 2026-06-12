@@ -97,10 +97,10 @@ body {
 .dyn-slot--hero-ms { min-width: 3.5rem; text-align: center; }
 .dyn-slot--live-ping { min-width: 3.25rem; text-align: right; }
 .dyn-slot--time { min-width: 7.5rem; }
-.dyn-slot--indicator { min-width: 3.25rem; text-align: right; }
-.dyn-slot--indicator-dec { min-width: 3.5rem; text-align: right; }
-.dyn-slot--indicator-pct { min-width: 3.25rem; text-align: right; }
-.dyn-slot--indicator-rate { min-width: 2.75rem; text-align: right; }
+.dyn-slot--indicator { min-width: 3.5ch; text-align: right; }
+.dyn-slot--indicator-dec { min-width: 5ch; text-align: right; }
+.dyn-slot--indicator-pct { min-width: 4ch; text-align: right; }
+.dyn-slot--indicator-rate { min-width: 4ch; text-align: right; }
 .dyn-slot--chip-ms { min-width: 2.75rem; text-align: right; }
 .dyn-slot--chip-ms-dec { min-width: 3rem; text-align: right; }
 .dyn-slot--chip-pct { min-width: 2.75rem; text-align: right; }
@@ -1820,6 +1820,50 @@ main > * {
   height: 185px;
 }
 
+.chart-wrap--latency {
+  isolation: isolate;
+}
+
+.chart-wrap--latency::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 10px;
+  background: radial-gradient(ellipse 85% 70% at 50% 110%, rgba(69, 200, 255, 0.07), transparent 65%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.chart-wrap--latency canvas {
+  position: relative;
+  z-index: 1;
+}
+
+.chart-meta {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.45rem;
+}
+
+.chart-legend {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.15rem 0.7rem;
+  font-size: 0.7rem;
+  color: var(--faint);
+}
+
+.legend-dot--latency-line {
+  background: linear-gradient(180deg, #45c8ff, color-mix(in srgb, #45c8ff 35%, transparent));
+  box-shadow: 0 0 8px color-mix(in srgb, #45c8ff 55%, transparent);
+}
+
+.legend-dot--jitter-band {
+  background: color-mix(in srgb, #b388ff 45%, transparent);
+  border: 1px solid color-mix(in srgb, #b388ff 35%, transparent);
+}
+
 /* ---------- tables ---------- */
 
 .tables-grid {
@@ -2210,6 +2254,7 @@ body.fill-mode .indicators {
 }
 
 body.fill-mode .indicator {
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -2221,6 +2266,15 @@ body.fill-mode .indicator-value,
 body.fill-mode .indicator-meaning,
 body.fill-mode .indicator-sub {
   margin: 0;
+}
+
+body.fill-mode .indicator-value {
+  min-width: 0;
+}
+
+body.fill-mode .indicator-value .dyn-slot,
+body.fill-mode .indicator-unit {
+  flex-shrink: 0;
 }
 
 body.fill-mode .indicator-scale {
@@ -2236,7 +2290,7 @@ body.fill-mode .indicator-badge {
 }
 
 body.fill-mode .indicator-value .mono {
-  font-size: clamp(2rem, 5.8vh, 4.2rem);
+  font-size: clamp(1.4rem, min(5.8vh, 4.5vw, 15cqi), 4.2rem);
 }
 
 body.fill-mode .indicator-unit {
@@ -2322,6 +2376,11 @@ body.fill-mode .panel--latency .chart-wrap {
   min-height: 0;
 }
 
+body.fill-mode .panel--latency .chart-meta {
+  flex-shrink: 0;
+  margin-top: clamp(0.2rem, 0.8vh, 0.45rem);
+}
+
 /* short viewports: drop secondary hints so the key numbers keep breathing room */
 @media (max-height: 820px) {
   body.fill-mode .readout-hint,
@@ -2371,7 +2430,7 @@ body.fill-mode .panel--latency .chart-wrap {
   }
 
   body.fill-mode .indicator-value .mono {
-    font-size: clamp(1.6rem, 4vh, 2.6rem);
+    font-size: clamp(1.2rem, min(4vh, 7vw, 14cqi), 2.6rem);
   }
 
   body.fill-mode #live-ping {

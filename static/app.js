@@ -1141,12 +1141,28 @@ const latencyBandsPlugin = makeThresholdBandsPlugin(
     { from: 70, to: 110, color: "rgba(255, 194, 77, 0.05)" },
     { from: 110, to: Infinity, color: "rgba(255, 93, 108, 0.06)" },
   ],
-  [
-    { value: 40, text: "great <40" },
-    { value: 70, text: "good <70" },
-    { value: 110, text: "fair <110" },
-  ],
+  [],
 );
+
+/* Neon glow on the primary latency line — matches dashboard accent styling. */
+const lineGlowPlugin = {
+  id: "lineGlow",
+  beforeDatasetDraw(chart, args) {
+    if (args.index !== 0) {
+      return;
+    }
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.shadowColor = "rgba(69, 200, 255, 0.45)";
+    ctx.shadowBlur = 8;
+  },
+  afterDatasetDraw(chart, args) {
+    if (args.index !== 0) {
+      return;
+    }
+    chart.ctx.restore();
+  },
+};
 
 const jitterBandsPlugin = makeThresholdBandsPlugin(
   "jitterBands",
@@ -1317,18 +1333,38 @@ function initCharts() {
     },
   };
 
+  const latencyTimeScale = {
+    type: "time",
+    time: {
+      unit: "minute",
+      displayFormats: {
+        minute: "HH:mm",
+        second: "HH:mm:ss",
+      },
+    },
+    ticks: {
+      ...monoTicks,
+      maxTicksLimit: 6,
+      maxRotation: 0,
+      autoSkip: true,
+    },
+    grid: { display: false },
+    border: { display: false },
+    bounds: "ticks",
+  };
+
   latencyChart = new Chart(document.getElementById("latency-chart"), {
     type: "line",
-    plugins: [latencyBandsPlugin, failureStripsPlugin],
+    plugins: [latencyBandsPlugin, failureStripsPlugin, lineGlowPlugin],
     data: {
       datasets: [
         {
           label: "Latency (ms)",
           data: [],
           borderColor: CHART_COLORS.latency,
-          backgroundColor: areaGradient(CHART_COLORS.latency, "3d"),
+          backgroundColor: areaGradient(CHART_COLORS.latency, "28"),
           fill: true,
-          borderWidth: 2,
+          borderWidth: 1.25,
           tension: 0,
           pointRadius: 0,
           spanGaps: false,
@@ -1338,7 +1374,7 @@ function initCharts() {
           label: "Jitter band (±)",
           data: [],
           borderColor: "rgba(179, 136, 255, 0)",
-          backgroundColor: "rgba(179, 136, 255, 0.18)",
+          backgroundColor: "rgba(179, 136, 255, 0.12)",
           fill: "+1",
           borderWidth: 0,
           tension: 0,
@@ -1363,23 +1399,35 @@ function initCharts() {
       ],
     },
     options: {
-      ...commonOptions,
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      parsing: false,
+      layout: {
+        padding: { top: 6, right: 4, bottom: 2, left: 0 },
+      },
+      interaction: {
+        mode: "index",
+        intersect: false,
+      },
       scales: {
-        ...commonOptions.scales,
+        x: latencyTimeScale,
         y: {
-          ...commonOptions.scales.y,
+          beginAtZero: true,
           suggestedMax: 120,
           grace: "10%",
+          ticks: {
+            ...monoTicks,
+            maxTicksLimit: 4,
+            padding: 6,
+            callback: (value) => `${value}`,
+          },
+          grid: { display: false },
+          border: { display: false },
         },
       },
       plugins: {
-        legend: {
-          ...legendStyle,
-          labels: {
-            ...legendStyle.labels,
-            filter: (item) => !item.text.startsWith("_"),
-          },
-        },
+        legend: { display: false },
         tooltip: {
           ...tooltipStyle,
           filter: (item) => item.datasetIndex === 0,
