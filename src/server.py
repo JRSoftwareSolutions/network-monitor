@@ -1,15 +1,17 @@
+import base64
 import re
 import threading
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
 import uvicorn
-from fastapi import FastAPI, Query
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from src.config import (
+    APP_ROOT,
     BUNDLE_ROOT,
     MAX_HIDDEN_POLL_MULTIPLIER,
     MAX_LOG_AGE_MINUTES,
@@ -50,6 +52,7 @@ from src.network_info import get_active_connection
 from src.ping_monitor import PingMonitor
 
 STATIC_DIR = BUNDLE_ROOT / "static"
+SCREENSHOTS_DIR = APP_ROOT / "screenshots"
 
 config = load_config()
 monitor = PingMonitor(
@@ -94,6 +97,10 @@ metrics_cache = MetricsCache()
 # Hostname or IPv4/IPv6 address; must not start with "-" so the value can
 # never be mistaken for a ping flag by the subprocess fallback.
 _TARGET_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:\-]{0,252}$")
+
+
+class ScreenshotUpload(BaseModel):
+    image: str = Field(min_length=32, max_length=20_000_000)
 
 
 class SettingsUpdate(BaseModel):
@@ -248,6 +255,25 @@ def _config_payload() -> dict:
 @app.get("/api/config")
 async def api_config():
     return _config_payload()
+
+
+@app.post("/api/screenshot")
+async def api_screenshot(body: ScreenshotUpload):
+    data = body.image.strip()
+    if data.startswith("data:"):
+        _, _, data = data.partition(",")
+    try:
+        png_bytes = base64.b64decode(data, validate=True)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Invalid screenshot image data") from exc
+    if not png_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        raise HTTPException(status_code=400, detail="Screenshot must be a PNG image")
+
+    SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
+    filename = f"dashboard-{datetime.now().strftime('%Y%m%d-%H%M%S')}.png"
+    path = SCREENSHOTS_DIR / filename
+    path.write_bytes(png_bytes)
+    return {"filename": filename, "path": str(path.resolve())}
 
 
 @app.post("/api/config")

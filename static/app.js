@@ -1,5 +1,6 @@
 const WINDOW_STORAGE_KEY = "networkMonitor.windowMinutes";
 const FILL_MODE_STORAGE_KEY = "networkMonitor.fillMode";
+const SCREENSHOT_RANGE_STORAGE_KEY = "networkMonitor.screenshotRange";
 // Refresh timings are defaults only: /api/config overrides them at bootstrap
 // and whenever settings are saved.
 let CONNECTION_REFRESH_MS = 120000;
@@ -14,6 +15,8 @@ const HEARTBEAT_MAX_MS = 150;
 
 const windowSelect = document.getElementById("window-select");
 const fillModeToggle = document.getElementById("fill-mode-toggle");
+const screenshotBtn = document.getElementById("screenshot-btn");
+const screenshotRangeSelect = document.getElementById("screenshot-range");
 const statusIndicator = document.getElementById("status-indicator");
 const statusText = document.getElementById("status-text");
 const updatedIndicator = document.getElementById("updated-indicator");
@@ -2084,6 +2087,239 @@ function initFillMode() {
   });
 }
 
+/* ---------- dashboard screenshot ---------- */
+
+const SCREENSHOT_IGNORE_SELECTOR = ".settings-popover, .metric-popover";
+
+function shouldIgnoreScreenshotElement(element) {
+  return Boolean(element.closest?.(SCREENSHOT_IGNORE_SELECTOR));
+}
+
+function getScreenshotRange() {
+  return screenshotRangeSelect?.value === "full" ? "full" : "viewport";
+}
+
+function getLayoutRect(element) {
+  let left = 0;
+  let top = 0;
+  let node = element;
+  while (node) {
+    left += node.offsetLeft;
+    top += node.offsetTop;
+    node = node.offsetParent;
+  }
+  return {
+    left,
+    top,
+    width: element.offsetWidth,
+    height: element.offsetHeight,
+  };
+}
+
+function normalizeScreenshotCrop({ left, top, width, height }) {
+  if (width <= 0 || height <= 0) return null;
+  return { left, top, width, height };
+}
+
+function getViewportContentCrop() {
+  const columnElements = [
+    document.querySelector(".topbar-inner"),
+    document.querySelector("main"),
+  ].filter(Boolean);
+  if (!columnElements.length) return null;
+
+  let left = Infinity;
+  let top = Infinity;
+  let right = -Infinity;
+  let bottom = -Infinity;
+
+  for (const element of columnElements) {
+    const rect = element.getBoundingClientRect();
+    left = Math.min(left, rect.left);
+    top = Math.min(top, rect.top);
+    right = Math.max(right, rect.right);
+    bottom = Math.max(bottom, rect.bottom);
+  }
+
+  const clippedLeft = Math.max(0, left);
+  const clippedTop = Math.max(0, top);
+  const clippedRight = Math.min(window.innerWidth, right);
+  const clippedBottom = Math.min(window.innerHeight, bottom);
+  if (clippedRight <= clippedLeft || clippedBottom <= clippedTop) return null;
+
+  return normalizeScreenshotCrop({
+    left: clippedLeft,
+    top: clippedTop,
+    width: clippedRight - clippedLeft,
+    height: clippedBottom - clippedTop,
+  });
+}
+
+function getFullPageContentCrop() {
+  const topbarInner = document.querySelector(".topbar-inner");
+  const topbar = document.querySelector(".topbar");
+  const main = document.querySelector("main");
+  if (!main) return null;
+
+  const columnElements = [topbarInner, main].filter(Boolean);
+  const columnRects = columnElements.map(getLayoutRect);
+  const topbarRect = topbar ? getLayoutRect(topbar) : null;
+  const mainRect = getLayoutRect(main);
+
+  const left = Math.min(...columnRects.map((rect) => rect.left));
+  const right = Math.max(...columnRects.map((rect) => rect.left + rect.width));
+  const top = topbarRect ? topbarRect.top : Math.min(...columnRects.map((rect) => rect.top));
+  const bottom = mainRect.top + mainRect.height;
+
+  return normalizeScreenshotCrop({
+    left,
+    top,
+    width: right - left,
+    height: bottom - top,
+  });
+}
+
+function cropScreenshotCanvas(canvas, crop, scale) {
+  if (!crop) return canvas;
+
+  const sx = Math.max(0, Math.floor(crop.left * scale));
+  const sy = Math.max(0, Math.floor(crop.top * scale));
+  const sw = Math.min(canvas.width - sx, Math.ceil(crop.width * scale));
+  const sh = Math.min(canvas.height - sy, Math.ceil(crop.height * scale));
+  if (sw <= 0 || sh <= 0) return canvas;
+
+  const cropped = document.createElement("canvas");
+  cropped.width = sw;
+  cropped.height = sh;
+  cropped.getContext("2d").drawImage(canvas, sx, sy, sw, sh, 0, 0, sw, sh);
+  return cropped;
+}
+
+async function captureDashboardCanvas(range = getScreenshotRange()) {
+  if (typeof html2canvas !== "function") {
+    throw new Error("Screenshot library failed to load");
+  }
+
+  const scale = window.devicePixelRatio || 1;
+  const options = {
+    backgroundColor: null,
+    scale,
+    useCORS: true,
+    logging: false,
+    ignoreElements: shouldIgnoreScreenshotElement,
+  };
+
+  if (range === "full") {
+    const doc = document.documentElement;
+    const width = Math.max(doc.scrollWidth, doc.clientWidth, window.innerWidth);
+    const height = Math.max(doc.scrollHeight, doc.clientHeight, window.innerHeight);
+    const crop = getFullPageContentCrop();
+    const canvas = await html2canvas(document.body, {
+      ...options,
+      scrollX: 0,
+      scrollY: 0,
+      x: 0,
+      y: 0,
+      width,
+      height,
+      windowWidth: width,
+      windowHeight: height,
+    });
+    return cropScreenshotCanvas(canvas, crop, scale);
+  }
+
+  const crop = getViewportContentCrop();
+  const canvas = await html2canvas(document.body, {
+    ...options,
+    x: window.scrollX,
+    y: window.scrollY,
+    width: window.innerWidth,
+    height: window.innerHeight,
+    windowWidth: window.innerWidth,
+    windowHeight: window.innerHeight,
+  });
+  return cropScreenshotCanvas(canvas, crop, scale);
+}
+
+function canvasToBlob(canvas, type = "image/png") {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob((blob) => {
+      if (blob) resolve(blob);
+      else reject(new Error("Failed to encode screenshot"));
+    }, type);
+  });
+}
+
+async function copyCanvasToClipboard(canvas) {
+  const blob = await canvasToBlob(canvas);
+  if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+    throw new Error("Clipboard image copy is not supported in this browser");
+  }
+  await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+}
+
+async function saveScreenshotToServer(dataUrl) {
+  const response = await fetch("/api/screenshot", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ image: dataUrl }),
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || "Failed to save screenshot");
+  }
+  return response.json();
+}
+
+async function takeDashboardScreenshot() {
+  if (!screenshotBtn || screenshotBtn.disabled) return;
+
+  const labelEl = screenshotBtn.querySelector(".fill-toggle-label");
+  const originalLabel = labelEl?.textContent ?? "Screenshot";
+  screenshotBtn.disabled = true;
+  if (screenshotRangeSelect) screenshotRangeSelect.disabled = true;
+  if (labelEl) labelEl.textContent = "Capturing…";
+
+  try {
+    const canvas = await captureDashboardCanvas();
+    const dataUrl = canvas.toDataURL("image/png");
+
+    await Promise.all([
+      copyCanvasToClipboard(canvas),
+      saveScreenshotToServer(dataUrl),
+    ]);
+
+    if (labelEl) labelEl.textContent = "Copied!";
+  } catch (error) {
+    console.error("Screenshot failed", error);
+    if (labelEl) labelEl.textContent = "Failed";
+  } finally {
+    window.setTimeout(() => {
+      screenshotBtn.disabled = false;
+      if (screenshotRangeSelect) screenshotRangeSelect.disabled = false;
+      if (labelEl) labelEl.textContent = originalLabel;
+    }, 1600);
+  }
+}
+
+function initScreenshot() {
+  if (!screenshotBtn) return;
+
+  if (screenshotRangeSelect) {
+    const saved = localStorage.getItem(SCREENSHOT_RANGE_STORAGE_KEY);
+    if (saved === "full" || saved === "viewport") {
+      screenshotRangeSelect.value = saved;
+    }
+    screenshotRangeSelect.addEventListener("change", () => {
+      localStorage.setItem(SCREENSHOT_RANGE_STORAGE_KEY, screenshotRangeSelect.value);
+    });
+  }
+
+  screenshotBtn.addEventListener("click", () => {
+    void takeDashboardScreenshot();
+  });
+}
+
 /* ---------- settings popover ---------- */
 
 /* Globally anycast resolvers with high availability — good proxies for
@@ -2342,6 +2578,7 @@ function initSettings() {
 
 async function bootstrap() {
   initFillMode();
+  initScreenshot();
   initSettings();
   initHelpPopovers();
   initCharts();
