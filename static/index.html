@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Network Monitor</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.2.1/dist/chartjs-chart-financial.min.js"></script>
+</head>
+<body>
+  <header class="header">
+    <div class="header-top">
+      <div class="header-title">
+        <h1>Network Monitor</h1>
+        <p class="subtitle">Target: <span id="target-label">—</span></p>
+        <p class="subtitle">Currently connected to: <span id="connection-label">—</span></p>
+      </div>
+      <div class="controls">
+        <label for="window-select">Rolling window</label>
+        <select id="window-select">
+          <option value="5">5 minutes</option>
+          <option value="15">15 minutes</option>
+          <option value="30" selected>30 minutes</option>
+          <option value="60">60 minutes</option>
+          <option value="120">120 minutes</option>
+        </select>
+        <span id="status-indicator" class="status">Connecting…</span>
+      </div>
+    </div>
+    <div id="health-bar" class="health-bar health-bar--no-data" role="status" aria-live="polite">
+      <span class="health-bar__dot" aria-hidden="true"></span>
+      <span id="health-label" class="health-bar__label">No data</span>
+      <span id="health-detail" class="health-bar__detail">Waiting for samples in the selected window…</span>
+    </div>
+  </header>
+
+  <main>
+    <section class="cards" id="summary-cards">
+      <article class="card">
+        <h2>Current Latency</h2>
+        <p class="value" id="current-latency">—</p>
+      </article>
+      <article class="card">
+        <h2>Avg Latency</h2>
+        <p class="value" id="avg-latency">—</p>
+      </article>
+      <article class="card">
+        <h2>Avg Jitter</h2>
+        <p class="value" id="avg-jitter">—</p>
+      </article>
+      <article class="card">
+        <h2>Packet Loss</h2>
+        <p class="value" id="packet-loss">—</p>
+      </article>
+      <article class="card">
+        <h2>Samples</h2>
+        <p class="value" id="sample-count">—</p>
+      </article>
+    </section>
+
+    <section class="panel">
+      <h2>Latency Blocks (last 5 min)</h2>
+      <p class="panel-subtitle">1-minute candles — color reflects quality (green = good, yellow = fair, red = poor) based on latency, jitter, and packet loss</p>
+      <div class="chart-wrap chart-wrap--short">
+        <canvas id="latency-blocks-chart"></canvas>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Latency &amp; Jitter</h2>
+      <div class="chart-wrap">
+        <canvas id="latency-chart"></canvas>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Packet Loss</h2>
+      <div class="chart-wrap chart-wrap--short">
+        <canvas id="loss-chart"></canvas>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Recent Samples</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Latency</th>
+              <th>Jitter</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody id="recent-table">
+            <tr><td colspan="4" class="empty">Waiting for data…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,276 @@
+:root {
+  color-scheme: dark;
+  --bg: #0f1419;
+  --panel: #1a2332;
+  --border: #2d3a4f;
+  --text: #e7ecf3;
+  --muted: #8b9cb3;
+  --accent: #4da3ff;
+  --success: #3dd68c;
+  --danger: #ff6b6b;
+  --warning: #ffb020;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: 1.5rem 2rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 1rem;
+}
+
+.header h1 {
+  margin: 0 0 0.25rem;
+  font-size: 1.5rem;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.controls label {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.controls select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.45rem 0.6rem;
+}
+
+.status {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.status.live {
+  color: var(--success);
+}
+
+.status.error {
+  color: var(--danger);
+}
+
+.health-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(15, 20, 25, 0.55);
+}
+
+.health-bar__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--muted);
+}
+
+.health-bar__label {
+  font-size: 1rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.health-bar__detail {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.health-bar--healthy {
+  border-color: rgba(61, 214, 140, 0.35);
+  background: rgba(61, 214, 140, 0.08);
+}
+
+.health-bar--healthy .health-bar__dot,
+.health-bar--healthy .health-bar__label {
+  color: var(--success);
+}
+
+.health-bar--healthy .health-bar__dot {
+  background: var(--success);
+}
+
+.health-bar--degraded {
+  border-color: rgba(255, 176, 32, 0.35);
+  background: rgba(255, 176, 32, 0.08);
+}
+
+.health-bar--degraded .health-bar__dot,
+.health-bar--degraded .health-bar__label {
+  color: var(--warning);
+}
+
+.health-bar--degraded .health-bar__dot {
+  background: var(--warning);
+}
+
+.health-bar--poor,
+.health-bar--offline {
+  border-color: rgba(255, 107, 107, 0.35);
+  background: rgba(255, 107, 107, 0.08);
+}
+
+.health-bar--poor .health-bar__dot,
+.health-bar--poor .health-bar__label,
+.health-bar--offline .health-bar__dot,
+.health-bar--offline .health-bar__label {
+  color: var(--danger);
+}
+
+.health-bar--poor .health-bar__dot,
+.health-bar--offline .health-bar__dot {
+  background: var(--danger);
+}
+
+.health-bar--no-data .health-bar__dot,
+.health-bar--no-data .health-bar__label {
+  color: var(--muted);
+}
+
+main {
+  padding: 1.5rem 2rem 2rem;
+  display: grid;
+  gap: 1.25rem;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 1rem;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+}
+
+.card h2 {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.card .value {
+  margin: 0;
+  font-size: 1.6rem;
+  font-weight: 600;
+}
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.1rem 1.25rem;
+}
+
+.panel h2 {
+  margin: 0 0 0.35rem;
+  font-size: 1rem;
+}
+
+.panel-subtitle {
+  margin: 0 0 1rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+.chart-wrap {
+  position: relative;
+  height: 280px;
+}
+
+.chart-wrap--short {
+  height: 180px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9rem;
+}
+
+th,
+td {
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+th {
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.empty {
+  color: var(--muted);
+  text-align: center;
+}
+
+.badge {
+  display: inline-block;
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.8rem;
+}
+
+.badge.ok {
+  background: rgba(61, 214, 140, 0.15);
+  color: var(--success);
+}
+
+.badge.fail {
+  background: rgba(255, 107, 107, 0.15);
+  color: var(--danger);
+}
+
+@media (max-width: 720px) {
+  .header,
+  main {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}

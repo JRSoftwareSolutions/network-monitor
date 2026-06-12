@@ -1,0 +1,10 @@
+target: "1.1.1.1"
+ping_interval_seconds: 3
+log_file: "logs/metrics.jsonl"
+server_host: "127.0.0.1"
+server_port: 8080
+default_window_minutes: 30
+max_log_age_minutes: 60
+archive_enabled: true
+max_log_size_mb: 1
+archive_dir: "logs/archive"
