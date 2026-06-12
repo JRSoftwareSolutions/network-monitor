@@ -86,8 +86,9 @@ Top to bottom:
 Plus:
 
 - Live tab title (`28 ms · Good to game`) and a favicon dot that recolors with the verdict, so the tab works as a background monitor
-- Poll interval matches `ping_interval_seconds` from config; checks `/api/metrics/status` each interval and only loads full metrics when a new sample is available
-- Connection info refreshes every 30 seconds (cached server-side)
+- Poll interval matches `ping_interval_seconds` from config; checks `/api/metrics/status` each interval and only loads full metrics when a new sample is available (cached server-side between samples)
+- Connection info refreshes every 2 minutes (cached server-side for 5 minutes)
+- Background tab polling slows to 5× the normal interval
 - Rolling window options derived from `max_log_age_minutes`; selection saved in browser `localStorage`
 - "Updated Xs ago" staleness indicator
 
@@ -135,4 +136,4 @@ Packet loss in stats is computed over the selected window: `(failed pings / tota
 
 ## Ping parsing
 
-Ping output is parsed with a locale-neutral pattern so non-English Windows locales (e.g. Dutch `tijd=14 ms`) are handled correctly.
+On Windows, pings use the native `IcmpSendEcho` API (no `ping.exe` subprocess per sample). Hostnames are resolved once and cached for five minutes; if native ICMP is unavailable, the monitor falls back to locale-neutral parsing of the `ping` command output (e.g. Dutch `tijd=14 ms`).

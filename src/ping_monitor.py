@@ -1,5 +1,6 @@
 import re
 import subprocess
+import sys
 import threading
 import time
 from datetime import datetime, timezone
@@ -10,6 +11,18 @@ from src.metrics import JitterTracker, MetricsLogger, SampleStore, read_samples
 # Locale-neutral: matches time=14ms, tijd=14 ms, temps=14,5ms, etc.
 LATENCY_PATTERN = re.compile(r"[=<]\s*(\d+(?:[.,]\d+)?)\s*ms", re.IGNORECASE)
 SUB_MILLIS_PATTERN = re.compile(r"[=<]\s*1\s*ms", re.IGNORECASE)
+
+DNS_REFRESH_SECONDS = 300.0
+_PING_CREATION_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+
+
+def _ping_startupinfo() -> subprocess.STARTUPINFO | None:
+    if sys.platform != "win32":
+        return None
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    return startupinfo
 
 
 def parse_ping_output(output: str, returncode: int = 0) -> tuple[bool, float | None]:
@@ -28,16 +41,74 @@ def parse_ping_output(output: str, returncode: int = 0) -> tuple[bool, float | N
     return False, None
 
 
-def run_ping(target: str, timeout_ms: int = 1000) -> tuple[bool, float | None]:
+def run_ping_subprocess(target: str, timeout_ms: int = 1000) -> tuple[bool, float | None]:
     result = subprocess.run(
         ["ping", "-n", "1", "-w", str(timeout_ms), target],
         capture_output=True,
         text=True,
         encoding="cp437",
         errors="replace",
+        startupinfo=_ping_startupinfo(),
+        creationflags=_PING_CREATION_FLAGS,
     )
     output = result.stdout + result.stderr
     return parse_ping_output(output, result.returncode)
+
+
+class PingBackend:
+    """Native Windows ICMP when available; subprocess ping as fallback."""
+
+    def __init__(self, target: str, timeout_ms: int = 1000) -> None:
+        self.target = target
+        self.timeout_ms = timeout_ms
+        self._target_ip: int | None = None
+        self._resolved_at = 0.0
+        self._win_ping = None
+
+        if sys.platform == "win32":
+            try:
+                from src import win_ping
+
+                self._win_ping = win_ping
+            except OSError:
+                self._win_ping = None
+            self._resolve_now()
+
+    def set_target(self, target: str) -> None:
+        """Switch the ping destination; the next ping re-resolves it."""
+        self.target = target
+        self._target_ip = None
+        self._resolved_at = 0.0
+
+    def _resolve_now(self) -> None:
+        if self._win_ping is None:
+            return
+        try:
+            self._target_ip = self._win_ping.resolve_target(self.target)
+        except OSError:
+            # Unresolvable right now: keep the monitor alive, let the
+            # subprocess fallback report failures, retry on the next ping.
+            self._target_ip = None
+        self._resolved_at = time.monotonic()
+
+    def _ensure_ip(self) -> int | None:
+        if self._win_ping is None:
+            return None
+
+        now = time.monotonic()
+        if self._target_ip is None or now - self._resolved_at >= DNS_REFRESH_SECONDS:
+            self._resolve_now()
+        return self._target_ip
+
+    def ping(self) -> tuple[bool, float | None]:
+        if self._win_ping is not None:
+            ip_addr = self._ensure_ip()
+            if ip_addr is not None:
+                try:
+                    return self._win_ping.run_win_ping(ip_addr, self.timeout_ms)
+                except OSError:
+                    self._win_ping = None
+        return run_ping_subprocess(self.target, self.timeout_ms)
 
 
 class PingMonitor:
@@ -57,6 +128,7 @@ class PingMonitor:
         self.interval_seconds = interval_seconds
         self.ping_timeout_ms = ping_timeout_ms
         self.max_log_age_minutes = max_log_age_minutes
+        self._backend = PingBackend(target, ping_timeout_ms)
         self._logger = MetricsLogger(
             log_file,
             max_log_age_minutes,
@@ -81,6 +153,35 @@ class PingMonitor:
     def get_latest_sample(self) -> dict | None:
         return self._store.latest()
 
+    def get_recent_samples(self, count: int = 60) -> list[dict]:
+        return self._store.get_recent(count)
+
+    def apply_settings(
+        self,
+        *,
+        target: str | None = None,
+        interval_seconds: float | None = None,
+        max_log_age_minutes: int | None = None,
+    ) -> None:
+        """Apply new settings to the running monitor without a restart.
+
+        The ping loop reads `interval_seconds` each iteration, a changed
+        target is re-resolved on the next ping, and retention updates reach
+        both the in-memory store and the log maintenance thread.
+        """
+        if target is not None and target != self.target:
+            self.target = target
+            self._backend.set_target(target)
+            # Jitter compares consecutive RTTs; a target switch would
+            # otherwise register as one bogus spike.
+            self._jitter.reset()
+        if interval_seconds is not None:
+            self.interval_seconds = interval_seconds
+        if max_log_age_minutes is not None and max_log_age_minutes != self.max_log_age_minutes:
+            self.max_log_age_minutes = max_log_age_minutes
+            self._logger.max_log_age_minutes = max_log_age_minutes
+            self._store.set_max_age_minutes(max_log_age_minutes)
+
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             return
@@ -92,11 +193,13 @@ class PingMonitor:
         self._stop_event.set()
         if self._thread:
             self._thread.join(timeout=self.interval_seconds + self.ping_timeout_ms / 1000 + 2)
+        self._logger.flush()
+        self._logger.close()
 
     def _run_loop(self) -> None:
         while not self._stop_event.is_set():
             started = time.monotonic()
-            success, latency_ms = run_ping(self.target, self.ping_timeout_ms)
+            success, latency_ms = self._backend.ping()
             jitter_ms = self._jitter.update(latency_ms) if success else None
             if not success:
                 self._jitter.reset()

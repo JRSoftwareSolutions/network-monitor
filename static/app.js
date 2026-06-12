@@ -1,5 +1,10 @@
 const WINDOW_STORAGE_KEY = "networkMonitor.windowMinutes";
-const CONNECTION_REFRESH_MS = 30000;
+const FILL_MODE_STORAGE_KEY = "networkMonitor.fillMode";
+// Refresh timings are defaults only: /api/config overrides them at bootstrap
+// and whenever settings are saved.
+let CONNECTION_REFRESH_MS = 120000;
+let FULL_REFRESH_MS = 60000;
+let HIDDEN_POLL_MULTIPLIER = 10;
 const STALE_WARN_SECONDS = 10;
 const STALE_ERROR_SECONDS = 30;
 const HEARTBEAT_COUNT = 60;
@@ -8,6 +13,7 @@ const HEARTBEAT_MAX_MS = 150;
 /* ---------- dom refs ---------- */
 
 const windowSelect = document.getElementById("window-select");
+const fillModeToggle = document.getElementById("fill-mode-toggle");
 const statusIndicator = document.getElementById("status-indicator");
 const statusText = document.getElementById("status-text");
 const updatedIndicator = document.getElementById("updated-indicator");
@@ -92,6 +98,7 @@ const outagesTable = document.getElementById("outages-table");
 const blocksPanelTitle = document.getElementById("blocks-panel-title");
 
 let latencyChart;
+let jitterChart;
 let lossChart;
 let latencyBlocksChart;
 let pollTimer;
@@ -100,7 +107,9 @@ let stalenessTimer;
 let pollIntervalMs = 1000;
 let lastSampleTs = null;
 let lastUpdatedAt = null;
+let lastFullRefreshAt = null;
 let lastFaviconLevel = null;
+let currentConfig = null;
 
 const LEVEL_COLORS = {
   great: "#3dffa2",
@@ -148,6 +157,26 @@ function rateMetric(metric, value) {
     default:
       return "none";
   }
+}
+
+function rateOutageDuration(seconds) {
+  if (seconds < 30) {
+    return "okay";
+  }
+  if (seconds < 120) {
+    return "bad";
+  }
+  return "offline";
+}
+
+function rateOutageFailures(count) {
+  if (count <= 5) {
+    return "okay";
+  }
+  if (count <= 20) {
+    return "bad";
+  }
+  return "offline";
 }
 
 /* Position (0-100%) on a 4-segment scale bar, aligned with rating zones. */
@@ -584,6 +613,86 @@ function updateStatusPanel(now) {
 
 /* ---------- key indicators ---------- */
 
+const METRIC_HELP = {
+  ping: {
+    title: "Ping",
+    paragraphs: [
+      "Your typical round-trip latency to the target — the steady response time you'd normally feel in-game, not a single momentary reading.",
+      "Calculated as the median of successful pings over the last 60 seconds. Short spikes barely move this number, so it reflects your baseline rather than one-off blips.",
+    ],
+    thresholds: "Great &lt; 40 ms · Good &lt; 70 ms · Okay &lt; 110 ms · Bad ≥ 110 ms",
+  },
+  jitter: {
+    title: "Jitter",
+    paragraphs: [
+      "How much your ping wobbles from one packet to the next. Low jitter means steady timing; high jitter feels like stutter or rubber-banding even when average ping looks fine.",
+      "Average inter-arrival jitter (RFC 3550-style smoothing) across successful pings in the last 2 minutes.",
+    ],
+    thresholds: "Great &lt; 8 ms · Good &lt; 15 ms · Okay &lt; 30 ms · Bad ≥ 30 ms",
+  },
+  loss: {
+    title: "Packet loss",
+    paragraphs: [
+      "The share of ping requests that never got a reply. Dropped packets make actions arrive late or not at all — you'll notice it as hitches, desync, or abilities misfiring.",
+      "Failed pings divided by total pings in the last 2 minutes.",
+    ],
+    thresholds: "Great 0% · Good &lt; 1% · Okay ≤ 3% · Bad &gt; 3%",
+  },
+  spikes: {
+    title: "Spike rate",
+    paragraphs: [
+      "How often latency suddenly shoots far above your normal baseline. A single bad ping is a micro-hitch; frequent spikes feel like ongoing rubber-banding.",
+      "Counts pings that exceed max(2.5× baseline, baseline + 80 ms) in the last 2 minutes, then expresses that as spikes per minute. The rating follows the rate, not the single worst value.",
+    ],
+    thresholds: "Great 0/min · Good &lt; 1/min · Okay ≤ 4/min · Bad &gt; 4/min",
+  },
+};
+
+const CHART_HELP = {
+  "live-feed": {
+    title: "Live feed",
+    paragraphs: [
+      "The raw, unfiltered view of what's happening right now. The big number is the latest ping, and each bar in the strip is one ping — the last 60, newest on the right. Taller bars mean higher latency; a full-height red bar is a ping that never came back.",
+      "Nothing here is smoothed or damped, so this row is allowed to jump around. The instant chip reads only the last few pings — treat it as a gut check, not a verdict.",
+    ],
+    thresholds: "Bar colors: great &lt; 40 ms · good &lt; 70 ms · fair &lt; 110 ms · poor ≥ 110 ms · red = failed",
+  },
+  "latency-blocks": {
+    title: "Latency blocks",
+    paragraphs: [
+      "Each candle condenses one minute of pings, stock-chart style: the thin wick spans the lowest to highest latency in that minute, and the thick body runs from the first reading (open) to the last (close).",
+      "Color grades the whole minute by blending packet loss, average latency and jitter — so a minute can turn amber or red from loss alone even when latency looks fine. Hover a candle for the exact numbers.",
+    ],
+    thresholds: "Green = good · amber = fair · red = poor — weighted blend: loss 50% · latency 35% · jitter 15%",
+  },
+  latency: {
+    title: "Latency",
+    paragraphs: [
+      "Every ping's round-trip time across the selected window. The purple band hugging the line shows ±jitter at that moment — the wider the band, the less steady the connection.",
+      "Shaded horizontal zones in the background mark the quality thresholds, and thin red vertical strips mark pings that failed and therefore have no latency value.",
+    ],
+    thresholds: "Zones: great &lt; 40 ms · good &lt; 70 ms · fair &lt; 110 ms · poor ≥ 110 ms",
+  },
+  "jitter-chart": {
+    title: "Jitter",
+    paragraphs: [
+      "How much the timing between pings wobbles, plotted per ping. A line hugging zero means packets arrive on a steady beat; rising jitter feels like stutter or rubber-banding even when average ping looks fine.",
+      "Values use the same RFC 3550-style smoothing as the jitter indicator above, so a single odd packet won't spike the line.",
+    ],
+    thresholds: "Zones: great &lt; 8 ms · good &lt; 15 ms · fair &lt; 30 ms · poor ≥ 30 ms",
+  },
+  "loss-chart": {
+    title: "Packet loss",
+    paragraphs: [
+      "The share of pings that went unanswered, bucketed per minute — one bar per minute, taller is worse. Minutes with no loss show no bar at all.",
+      "Bar color reflects severity, and the dashed reference lines mark where loss starts to be noticeable. Hover a bar to see exactly how many pings failed.",
+    ],
+    thresholds: "Good &lt; 1% · fair ≤ 3% · poor &gt; 3%",
+  },
+};
+
+const HELP_CONTENT = { ...METRIC_HELP, ...CHART_HELP };
+
 const INDICATOR_DECIMALS = { ping: 0, jitter: 1, loss: 1, spikes: 1 };
 const RATING_WORDS = { great: "great", good: "good", okay: "fair", bad: "poor" };
 
@@ -643,6 +752,162 @@ function updateIndicators(now) {
   } else {
     setSlotText(indicatorEls.spikes.worst, "—");
   }
+}
+
+/* ---------- metric help popover ---------- */
+
+const metricPopover = document.getElementById("metric-popover");
+const metricPopoverTitle = document.getElementById("metric-popover-title");
+const metricPopoverBody = document.getElementById("metric-popover-body");
+const metricPopoverPanel = metricPopover?.querySelector(".metric-popover__panel");
+const metricPopoverClose = metricPopover?.querySelector(".metric-popover__close");
+const metricPopoverBackdrop = metricPopover?.querySelector(".metric-popover__backdrop");
+let activeHelpKey = null;
+let activeHelpTrigger = null;
+
+const THRESHOLD_LEVEL_WORDS = {
+  great: "great",
+  good: "good",
+  okay: "okay",
+  fair: "okay",
+  poor: "bad",
+  bad: "bad",
+  green: "good",
+  amber: "okay",
+  red: "bad",
+};
+
+function colorizeThresholdText(text) {
+  let html = text.replace(
+    /\b(Great|Good|Okay|Bad|great|good|fair|poor|Green|amber|red)(?=\s|[<≥≤=·]|$)/gi,
+    (match) => {
+      const level = THRESHOLD_LEVEL_WORDS[match.toLowerCase()];
+      if (!level) return match;
+      return `<span class="metric-popover__lvl metric-popover__lvl--${level}">${match}</span>`;
+    },
+  );
+  html = html.replace(
+    /\bfailed\b/gi,
+    '<span class="metric-popover__lvl metric-popover__lvl--bad">failed</span>',
+  );
+  return html;
+}
+
+function renderMetricHelpBody(help) {
+  const parts = help.paragraphs.map((text) => `<p>${text}</p>`);
+  if (help.thresholds) {
+    parts.push(`<p class="metric-popover__thresholds">${colorizeThresholdText(help.thresholds)}</p>`);
+  }
+  metricPopoverBody.innerHTML = parts.join("");
+}
+
+function positionMetricPopover(trigger) {
+  if (!metricPopoverPanel || !trigger) return;
+
+  const rect = trigger.getBoundingClientRect();
+  const panelRect = metricPopoverPanel.getBoundingClientRect();
+  const margin = 12;
+  const gap = 10;
+  const viewportW = window.innerWidth;
+  const viewportH = window.innerHeight;
+
+  let top = rect.bottom + gap;
+  if (top + panelRect.height > viewportH - margin) {
+    top = rect.top - panelRect.height - gap;
+  }
+  top = Math.max(margin, Math.min(top, viewportH - panelRect.height - margin));
+
+  let left = rect.left + rect.width / 2 - panelRect.width / 2;
+  left = Math.max(margin, Math.min(left, viewportW - panelRect.width - margin));
+
+  metricPopoverPanel.style.top = `${top}px`;
+  metricPopoverPanel.style.left = `${left}px`;
+}
+
+function setMetricHelpExpanded(trigger, expanded) {
+  if (!trigger) return;
+  trigger.setAttribute("aria-expanded", String(expanded));
+}
+
+function closeMetricPopover() {
+  if (!metricPopover || metricPopover.hidden) return;
+  metricPopover.hidden = true;
+  setMetricHelpExpanded(activeHelpTrigger, false);
+  activeHelpKey = null;
+  activeHelpTrigger = null;
+}
+
+function openMetricPopover(key, trigger) {
+  const help = HELP_CONTENT[key];
+  if (!help || !metricPopover || !trigger) return;
+
+  if (activeHelpKey === key && !metricPopover.hidden) {
+    closeMetricPopover();
+    return;
+  }
+
+  if (activeHelpTrigger && activeHelpTrigger !== trigger) {
+    setMetricHelpExpanded(activeHelpTrigger, false);
+  }
+
+  activeHelpKey = key;
+  activeHelpTrigger = trigger;
+  metricPopoverTitle.textContent = help.title;
+  renderMetricHelpBody(help);
+
+  const rating = key in INDICATOR_DECIMALS
+    ? indicatorEls[key]?.root?.dataset.rating
+    : null;
+  if (rating && rating !== "none") {
+    metricPopoverPanel.dataset.rating = rating;
+  } else {
+    delete metricPopoverPanel.dataset.rating;
+  }
+
+  metricPopover.hidden = false;
+  setMetricHelpExpanded(trigger, true);
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => positionMetricPopover(trigger));
+  });
+}
+
+function initHelpPopovers() {
+  if (!metricPopover) return;
+
+  for (const key of Object.keys(INDICATOR_DECIMALS)) {
+    const trigger = indicatorEls[key]?.root;
+    if (!trigger) continue;
+
+    trigger.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openMetricPopover(key, trigger);
+    });
+    trigger.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        openMetricPopover(key, trigger);
+      }
+    });
+  }
+
+  // Native buttons already fire click on Enter/Space, so no keydown handler needed.
+  for (const button of document.querySelectorAll(".panel-help-btn[data-help]")) {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openMetricPopover(button.dataset.help, button);
+    });
+  }
+
+  metricPopoverClose?.addEventListener("click", closeMetricPopover);
+  metricPopoverBackdrop?.addEventListener("click", closeMetricPopover);
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeMetricPopover();
+  });
+
+  window.addEventListener("resize", () => {
+    if (!metricPopover.hidden) positionMetricPopover(activeHelpTrigger);
+  });
 }
 
 /* ---------- live feed (raw micro view) ---------- */
@@ -822,62 +1087,133 @@ const qualityCandleColorsPlugin = {
   },
 };
 
-/* ---------- latency threshold bands ---------- */
+/* ---------- threshold band backgrounds (latency / jitter / loss) ---------- */
 
-const LATENCY_BANDS = [
-  { from: 0, to: 40, color: "rgba(61, 255, 162, 0.045)" },
-  { from: 40, to: 70, color: "rgba(79, 209, 255, 0.035)" },
-  { from: 70, to: 110, color: "rgba(255, 194, 77, 0.05)" },
-  { from: 110, to: Infinity, color: "rgba(255, 93, 108, 0.06)" },
-];
+function makeThresholdBandsPlugin(id, bands, lines) {
+  return {
+    id,
+    beforeDraw(chart) {
+      const { ctx, chartArea, scales } = chart;
+      const y = scales.y;
+      if (!chartArea || !y) {
+        return;
+      }
+      ctx.save();
+      for (const band of bands) {
+        const yTop = y.getPixelForValue(Math.min(band.to, y.max));
+        const yBottom = y.getPixelForValue(Math.max(band.from, y.min));
+        const top = Math.max(chartArea.top, yTop);
+        const bottom = Math.min(chartArea.bottom, yBottom);
+        if (bottom <= top) {
+          continue;
+        }
+        ctx.fillStyle = band.color;
+        ctx.fillRect(chartArea.left, top, chartArea.right - chartArea.left, bottom - top);
+      }
 
-const LATENCY_BAND_LINES = [
-  { value: 40, text: "great <40" },
-  { value: 70, text: "good <70" },
-  { value: 110, text: "fair <110" },
-];
+      ctx.strokeStyle = "rgba(126, 164, 222, 0.16)";
+      ctx.setLineDash([4, 4]);
+      ctx.lineWidth = 1;
+      ctx.font = `9px ${MONO_FONT}`;
+      ctx.textAlign = "right";
+      for (const line of lines) {
+        if (line.value > y.max || line.value < y.min) {
+          continue;
+        }
+        const py = y.getPixelForValue(line.value);
+        ctx.beginPath();
+        ctx.moveTo(chartArea.left, py);
+        ctx.lineTo(chartArea.right, py);
+        ctx.stroke();
+        ctx.fillStyle = "rgba(143, 163, 194, 0.55)";
+        ctx.fillText(line.text, chartArea.right - 4, py - 3);
+      }
+      ctx.restore();
+    },
+  };
+}
 
-const latencyBandsPlugin = {
-  id: "latencyBands",
-  beforeDraw(chart) {
-    const { ctx, chartArea, scales } = chart;
-    const y = scales.y;
-    if (!chartArea || !y) {
+const latencyBandsPlugin = makeThresholdBandsPlugin(
+  "latencyBands",
+  [
+    { from: 0, to: 40, color: "rgba(61, 255, 162, 0.045)" },
+    { from: 40, to: 70, color: "rgba(79, 209, 255, 0.035)" },
+    { from: 70, to: 110, color: "rgba(255, 194, 77, 0.05)" },
+    { from: 110, to: Infinity, color: "rgba(255, 93, 108, 0.06)" },
+  ],
+  [
+    { value: 40, text: "great <40" },
+    { value: 70, text: "good <70" },
+    { value: 110, text: "fair <110" },
+  ],
+);
+
+const jitterBandsPlugin = makeThresholdBandsPlugin(
+  "jitterBands",
+  [
+    { from: 0, to: 8, color: "rgba(61, 255, 162, 0.045)" },
+    { from: 8, to: 15, color: "rgba(79, 209, 255, 0.035)" },
+    { from: 15, to: 30, color: "rgba(255, 194, 77, 0.05)" },
+    { from: 30, to: Infinity, color: "rgba(255, 93, 108, 0.06)" },
+  ],
+  [
+    { value: 8, text: "great <8" },
+    { value: 15, text: "good <15" },
+    { value: 30, text: "fair <30" },
+  ],
+);
+
+const lossBandsPlugin = makeThresholdBandsPlugin(
+  "lossBands",
+  [],
+  [
+    { value: 1, text: "good <1%" },
+    { value: 3, text: "fair ≤3%" },
+  ],
+);
+
+/* ---------- failed-ping strips on the latency chart ---------- */
+
+const failureStripsPlugin = {
+  id: "failureStrips",
+  beforeDatasetsDraw(chart) {
+    const failures = chart.$failures;
+    if (!failures?.length) {
       return;
     }
-    ctx.save();
-    for (const band of LATENCY_BANDS) {
-      const yTop = y.getPixelForValue(Math.min(band.to, y.max));
-      const yBottom = y.getPixelForValue(Math.max(band.from, y.min));
-      const top = Math.max(chartArea.top, yTop);
-      const bottom = Math.min(chartArea.bottom, yBottom);
-      if (bottom <= top) {
-        continue;
-      }
-      ctx.fillStyle = band.color;
-      ctx.fillRect(chartArea.left, top, chartArea.right - chartArea.left, bottom - top);
+    const { ctx, chartArea, scales } = chart;
+    const x = scales.x;
+    if (!chartArea || !x) {
+      return;
     }
-
-    ctx.strokeStyle = "rgba(126, 164, 222, 0.16)";
-    ctx.setLineDash([4, 4]);
-    ctx.lineWidth = 1;
-    ctx.font = `9px ${MONO_FONT}`;
-    ctx.textAlign = "right";
-    for (const line of LATENCY_BAND_LINES) {
-      if (line.value > y.max || line.value < y.min) {
+    const widthMs = chart.$failureWidthMs ?? 3000;
+    ctx.save();
+    for (const ts of failures) {
+      const px = x.getPixelForValue(ts);
+      if (px < chartArea.left || px > chartArea.right) {
         continue;
       }
-      const py = y.getPixelForValue(line.value);
-      ctx.beginPath();
-      ctx.moveTo(chartArea.left, py);
-      ctx.lineTo(chartArea.right, py);
-      ctx.stroke();
-      ctx.fillStyle = "rgba(143, 163, 194, 0.55)";
-      ctx.fillText(line.text, chartArea.right - 4, py - 3);
+      const half = Math.max(1, Math.abs(x.getPixelForValue(ts + widthMs) - px) / 2);
+      ctx.fillStyle = "rgba(255, 93, 108, 0.16)";
+      ctx.fillRect(px - half, chartArea.top, half * 2, chartArea.bottom - chartArea.top);
+      ctx.fillStyle = "rgba(255, 93, 108, 0.85)";
+      ctx.fillRect(px - 1, chartArea.top, 2, 6);
     }
     ctx.restore();
   },
 };
+
+/* ---------- per-minute loss bar colors ---------- */
+
+function lossBarColor(lossPct) {
+  if (lossPct < 1) {
+    return "rgba(79, 209, 255, 0.7)";
+  }
+  if (lossPct <= 3) {
+    return "rgba(255, 194, 77, 0.8)";
+  }
+  return "rgba(255, 93, 108, 0.85)";
+}
 
 /* ---------- window select ---------- */
 
@@ -983,7 +1319,7 @@ function initCharts() {
 
   latencyChart = new Chart(document.getElementById("latency-chart"), {
     type: "line",
-    plugins: [latencyBandsPlugin],
+    plugins: [latencyBandsPlugin, failureStripsPlugin],
     data: {
       datasets: [
         {
@@ -996,27 +1332,33 @@ function initCharts() {
           tension: 0,
           pointRadius: 0,
           spanGaps: false,
+          order: 1,
         },
         {
-          label: "Jitter (ms)",
+          label: "Jitter band (±)",
           data: [],
-          borderColor: CHART_COLORS.jitter,
-          backgroundColor: CHART_COLORS.jitter,
-          fill: false,
-          borderWidth: 1.5,
+          borderColor: "rgba(179, 136, 255, 0)",
+          backgroundColor: "rgba(179, 136, 255, 0.18)",
+          fill: "+1",
+          borderWidth: 0,
           tension: 0,
           pointRadius: 0,
+          pointHoverRadius: 0,
           spanGaps: false,
+          order: 2,
         },
         {
-          label: "Failed ping",
+          label: "_jitter-lower",
           data: [],
-          showLine: false,
-          pointStyle: "rectRot",
-          pointRadius: 4,
-          pointHoverRadius: 5,
-          backgroundColor: CHART_COLORS.fail,
-          borderColor: CHART_COLORS.fail,
+          borderColor: "rgba(179, 136, 255, 0)",
+          backgroundColor: "rgba(179, 136, 255, 0)",
+          fill: false,
+          borderWidth: 0,
+          tension: 0,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          spanGaps: false,
+          order: 2,
         },
       ],
     },
@@ -1030,35 +1372,121 @@ function initCharts() {
           grace: "10%",
         },
       },
+      plugins: {
+        legend: {
+          ...legendStyle,
+          labels: {
+            ...legendStyle.labels,
+            filter: (item) => !item.text.startsWith("_"),
+          },
+        },
+        tooltip: {
+          ...tooltipStyle,
+          filter: (item) => item.datasetIndex === 0,
+          callbacks: {
+            afterLabel(context) {
+              const jitter = context.raw?.jitter;
+              return jitter != null ? `Jitter: ±${jitter.toFixed(1)} ms` : "";
+            },
+          },
+        },
+      },
     },
   });
 
-  lossChart = new Chart(document.getElementById("loss-chart"), {
+  jitterChart = new Chart(document.getElementById("jitter-chart"), {
     type: "line",
+    plugins: [jitterBandsPlugin],
     data: {
       datasets: [
         {
-          label: "Rolling packet loss (%)",
+          label: "Jitter (ms)",
           data: [],
-          borderColor: CHART_COLORS.loss,
-          backgroundColor: areaGradient(CHART_COLORS.loss, "38"),
-          stepped: true,
-          borderWidth: 1.5,
-          pointRadius: 0,
+          borderColor: CHART_COLORS.jitter,
+          backgroundColor: areaGradient(CHART_COLORS.jitter, "38"),
           fill: true,
+          borderWidth: 1.5,
+          tension: 0,
+          pointRadius: 0,
+          spanGaps: false,
         },
       ],
     },
     options: {
       ...commonOptions,
+      plugins: {
+        ...commonOptions.plugins,
+        legend: { display: false },
+      },
       scales: {
         ...commonOptions.scales,
         y: {
           ...commonOptions.scales.y,
-          max: 100,
+          suggestedMax: 20,
+          grace: "10%",
+        },
+      },
+    },
+  });
+
+  lossChart = new Chart(document.getElementById("loss-chart"), {
+    type: "bar",
+    plugins: [lossBandsPlugin],
+    data: {
+      datasets: [
+        {
+          label: "Packet loss per minute (%)",
+          data: [],
+          backgroundColor: (context) => lossBarColor(context.raw?.y ?? 0),
+          borderRadius: 2,
+          borderSkipped: false,
+          barPercentage: 0.85,
+          categoryPercentage: 1,
+        },
+      ],
+    },
+    options: {
+      ...commonOptions,
+      interaction: {
+        mode: "nearest",
+        intersect: false,
+      },
+      scales: {
+        x: {
+          ...timeScale,
+          time: {
+            unit: "minute",
+            displayFormats: { minute: "HH:mm" },
+          },
+          offset: false,
+          grid: { color: CHART_GRID, offset: false },
+        },
+        y: {
+          ...commonOptions.scales.y,
+          suggestedMax: 5,
+          grace: "10%",
           ticks: {
             ...monoTicks,
             callback: (value) => `${value}%`,
+          },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          ...tooltipStyle,
+          callbacks: {
+            label(context) {
+              const point = context.raw;
+              if (!point) {
+                return "No data";
+              }
+              const lines = [`Loss: ${point.y.toFixed(1)}%`];
+              if (point.total) {
+                lines.push(`${point.failed} of ${point.total} pings failed`);
+              }
+              return lines;
+            },
           },
         },
       },
@@ -1151,16 +1579,24 @@ function initCharts() {
       },
     },
   });
+
+  initChartResizeObserver();
 }
 
-function computeRollingLoss(samples) {
-  let failed = 0;
-  return samples.map((sample, index) => {
-    if (!sample.success) {
-      failed += 1;
-    }
-    return Number(((failed / (index + 1)) * 100).toFixed(2));
+let chartResizeObserver;
+
+function initChartResizeObserver() {
+  chartResizeObserver?.disconnect();
+  chartResizeObserver = new ResizeObserver(() => {
+    resizeCharts();
   });
+
+  for (const id of ["latency-chart", "jitter-chart", "loss-chart", "latency-blocks-chart"]) {
+    const wrap = document.getElementById(id)?.closest(".chart-wrap");
+    if (wrap) {
+      chartResizeObserver.observe(wrap);
+    }
+  }
 }
 
 function chartTimeRange(windowMinutes, latestTs) {
@@ -1206,43 +1642,76 @@ function sampleTimestamp(sample) {
   return new Date(sample.ts).getTime();
 }
 
+/* Median spacing between consecutive samples, used to size failure strips. */
+function medianSampleSpacingMs(samples) {
+  const deltas = [];
+  for (let i = 1; i < samples.length; i += 1) {
+    const delta = sampleTimestamp(samples[i]) - sampleTimestamp(samples[i - 1]);
+    if (delta > 0) {
+      deltas.push(delta);
+    }
+  }
+  if (!deltas.length) {
+    return 3000;
+  }
+  deltas.sort((a, b) => a - b);
+  return deltas[Math.floor(deltas.length / 2)];
+}
+
 function updateCharts(samples, windowMinutes, latestTs) {
   const range = chartTimeRange(windowMinutes, latestTs);
   applyChartTimeRange(latencyChart, range);
-  applyChartTimeRange(lossChart, range);
+  applyChartTimeRange(jitterChart, range);
 
-  const hasServerRollingLoss = samples.some((sample) => sample.rolling_loss_pct != null);
+  const latencyData = [];
+  const bandUpper = [];
+  const bandLower = [];
+  const jitterData = [];
+  const failures = [];
 
-  const latencyData = samples.map((sample) => ({
-    x: sampleTimestamp(sample),
-    y: sample.success ? sample.latency_ms : null,
-  }));
-  const jitterData = samples.map((sample) => ({
-    x: sampleTimestamp(sample),
-    y: sample.jitter_ms ?? null,
-  }));
-  const failures = samples
-    .filter((sample) => !sample.success)
-    .map((sample) => ({
-      x: sampleTimestamp(sample),
-      y: 0,
-    }));
-  const rollingLoss = hasServerRollingLoss
-    ? samples.map((sample) => ({
-        x: sampleTimestamp(sample),
-        y: sample.rolling_loss_pct ?? 0,
-      }))
-    : computeRollingLoss(samples).map((value, index) => ({
-        x: sampleTimestamp(samples[index]),
-        y: value,
-      }));
+  for (const sample of samples) {
+    const x = sampleTimestamp(sample);
+    const latency = sample.success ? sample.latency_ms : null;
+    const jitter = sample.jitter_ms ?? null;
+
+    latencyData.push({ x, y: latency, jitter });
+    if (latency != null && jitter != null) {
+      bandUpper.push({ x, y: latency + jitter });
+      bandLower.push({ x, y: Math.max(0, latency - jitter) });
+    } else {
+      bandUpper.push({ x, y: null });
+      bandLower.push({ x, y: null });
+    }
+    jitterData.push({ x, y: jitter });
+    if (!sample.success) {
+      failures.push(x);
+    }
+  }
 
   latencyChart.data.datasets[0].data = latencyData;
-  latencyChart.data.datasets[1].data = jitterData;
-  latencyChart.data.datasets[2].data = failures;
+  latencyChart.data.datasets[1].data = bandUpper;
+  latencyChart.data.datasets[2].data = bandLower;
+  latencyChart.$failures = failures;
+  latencyChart.$failureWidthMs = medianSampleSpacingMs(samples);
   latencyChart.update("none");
 
-  lossChart.data.datasets[0].data = rollingLoss;
+  jitterChart.data.datasets[0].data = jitterData;
+  jitterChart.update("none");
+}
+
+function updateLossChart(blocksPayload, windowMinutes, latestTs) {
+  const buckets = blocksPayload?.buckets ?? [];
+  const bucketMs = (blocksPayload?.bucket_seconds ?? 60) * 1000;
+  applyChartTimeRange(lossChart, chartTimeRange(windowMinutes, latestTs));
+
+  lossChart.data.datasets[0].data = buckets
+    .filter((bucket) => bucket.sample_count > 0)
+    .map((bucket) => ({
+      x: new Date(bucket.ts_start).getTime() + bucketMs / 2,
+      y: bucket.loss_pct ?? 0,
+      failed: bucket.failed_count,
+      total: bucket.sample_count,
+    }));
   lossChart.update("none");
 }
 
@@ -1292,13 +1761,18 @@ function updateRecentTable(samples) {
 
   recentTable.innerHTML = recent
     .map((sample) => {
+      const rowClass = sample.success ? "table-row--success" : "table-row--failure";
       const statusClass = sample.success ? "ok" : "fail";
       const sampleStatus = sample.success ? "OK" : "Failed";
+      const latencyRating =
+        sample.success && sample.latency_ms != null ? rateMetric("ping", sample.latency_ms) : "none";
+      const jitterRating =
+        sample.success && sample.jitter_ms != null ? rateMetric("jitter", sample.jitter_ms) : "none";
       return `
-        <tr>
+        <tr class="${rowClass}">
           <td class="tabular">${formatTime(sample.ts)}</td>
-          <td class="tabular">${sample.success ? formatMs(sample.latency_ms) : "—"}</td>
-          <td class="tabular">${sample.jitter_ms != null ? formatMs(sample.jitter_ms) : "—"}</td>
+          <td class="tabular cell-rating" data-rating="${latencyRating}">${sample.success ? formatMs(sample.latency_ms) : "—"}</td>
+          <td class="tabular cell-rating" data-rating="${jitterRating}">${sample.jitter_ms != null ? formatMs(sample.jitter_ms) : "—"}</td>
           <td><span class="badge ${statusClass}">${sampleStatus}</span></td>
         </tr>
       `;
@@ -1314,14 +1788,17 @@ function updateOutagesTable(outages) {
 
   outagesTable.innerHTML = outages
     .map((outage) => {
+      const rowClass = outage.ongoing ? "table-row--ongoing" : "table-row--resolved";
       const statusClass = outage.ongoing ? "ongoing" : "resolved";
       const outageStatus = outage.ongoing ? "Ongoing" : "Resolved";
+      const durationRating = outage.ongoing ? "offline" : rateOutageDuration(outage.duration_seconds);
+      const failureRating = outage.ongoing ? "offline" : rateOutageFailures(outage.failed_count);
       return `
-        <tr>
+        <tr class="${rowClass}">
           <td class="tabular">${formatTime(outage.start_ts)}</td>
           <td class="tabular">${outage.end_ts ? formatTime(outage.end_ts) : "—"}</td>
-          <td class="tabular">${formatDuration(outage.duration_seconds)}</td>
-          <td class="tabular">${outage.failed_count}</td>
+          <td class="tabular cell-rating" data-rating="${durationRating}">${formatDuration(outage.duration_seconds)}</td>
+          <td class="tabular cell-rating" data-rating="${failureRating}">${outage.failed_count}</td>
           <td><span class="badge ${statusClass}">${outageStatus}</span></td>
         </tr>
       `;
@@ -1350,14 +1827,6 @@ function updateStalenessIndicator() {
 
 /* ---------- data fetching ---------- */
 
-async function fetchMetricsStatus() {
-  const response = await fetch("/api/metrics/status");
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-  return response.json();
-}
-
 async function fetchConnection() {
   const response = await fetch("/api/connection");
   if (!response.ok) {
@@ -1366,13 +1835,43 @@ async function fetchConnection() {
   return response.json();
 }
 
-async function fetchMetrics() {
-  const windowMinutes = getWindowMinutes();
-  const response = await fetch(`/api/metrics?windowMinutes=${windowMinutes}`);
+async function fetchMetrics(knownTs = null) {
+  const params = new URLSearchParams({ windowMinutes: String(getWindowMinutes()) });
+  if (knownTs) {
+    params.set("knownTs", knownTs);
+  }
+  const response = await fetch(`/api/metrics?${params.toString()}`);
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
   }
   return response.json();
+}
+
+async function fetchMetricsLive(knownTs = null) {
+  const url = knownTs
+    ? `/api/metrics/live?knownTs=${encodeURIComponent(knownTs)}`
+    : "/api/metrics/live";
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+  return response.json();
+}
+
+function applyLiveMetrics(payload) {
+  const { recent_samples: recentSamples, now } = payload;
+
+  updateHero(now);
+  updateStatusPanel(now);
+  updateIndicators(now);
+  updateLiveFeed(now, recentSamples);
+  updateRecentTable(recentSamples);
+
+  lastUpdatedAt = Date.now();
+  updateStalenessIndicator();
+
+  statusText.textContent = recentSamples?.length ? "Live" : "Waiting for data…";
+  statusIndicator.className = recentSamples?.length ? "status live" : "status";
 }
 
 function applyMetrics(payload) {
@@ -1399,6 +1898,7 @@ function applyMetrics(payload) {
   updateHealthChip(health, stats);
   updateBlocksChart(blocks, windowMins, payload.latest_ts);
   updateCharts(samples, windowMins, payload.latest_ts);
+  updateLossChart(blocks, windowMins, payload.latest_ts);
   updateRecentTable(recentSamples ?? samples);
   updateOutagesTable(outages);
 
@@ -1407,6 +1907,7 @@ function applyMetrics(payload) {
 
   statusText.textContent = samples.length ? "Live" : "Waiting for data…";
   statusIndicator.className = samples.length ? "status live" : "status";
+  lastFullRefreshAt = Date.now();
 }
 
 async function refreshConnection() {
@@ -1418,18 +1919,42 @@ async function refreshConnection() {
   }
 }
 
-async function poll(force = false) {
+async function poll(forceFull = false) {
   try {
-    const status = await fetchMetricsStatus();
-    const hasNewData = status.latest_ts !== lastSampleTs;
-
-    if (!force && !hasNewData) {
+    if (document.hidden && !forceFull) {
+      // Tab in background: cheap heartbeat only, no DOM or chart work.
+      // The forced refresh on visibilitychange repaints everything.
+      const live = await fetchMetricsLive(lastSampleTs);
+      if (!live.unchanged && live.latest_ts) {
+        lastSampleTs = live.latest_ts;
+      }
       return;
     }
 
-    const payload = await fetchMetrics();
-    lastSampleTs = payload.latest_ts ?? status.latest_ts;
-    applyMetrics(payload);
+    const needsFullRefresh =
+      forceFull ||
+      !lastFullRefreshAt ||
+      Date.now() - lastFullRefreshAt >= FULL_REFRESH_MS;
+
+    if (needsFullRefresh) {
+      // forceFull means the window may have changed, so knownTs must not
+      // short-circuit the response.
+      const payload = await fetchMetrics(forceFull ? null : lastSampleTs);
+      if (payload.unchanged) {
+        lastFullRefreshAt = Date.now();
+        return;
+      }
+      lastSampleTs = payload.latest_ts ?? null;
+      applyMetrics(payload);
+      return;
+    }
+
+    const live = await fetchMetricsLive(lastSampleTs);
+    if (live.unchanged) {
+      return;
+    }
+    lastSampleTs = live.latest_ts ?? null;
+    applyLiveMetrics(live);
   } catch (error) {
     statusText.textContent = "Connection error";
     statusIndicator.className = "status error";
@@ -1437,12 +1962,19 @@ async function poll(force = false) {
   }
 }
 
+function getPollIntervalMs() {
+  if (document.hidden) {
+    return pollIntervalMs * HIDDEN_POLL_MULTIPLIER;
+  }
+  return pollIntervalMs;
+}
+
 function schedulePoll() {
   clearTimeout(pollTimer);
   pollTimer = setTimeout(async () => {
     await poll(false);
     schedulePoll();
-  }, pollIntervalMs);
+  }, getPollIntervalMs());
 }
 
 function scheduleConnectionRefresh() {
@@ -1453,22 +1985,324 @@ function scheduleConnectionRefresh() {
   }, CONNECTION_REFRESH_MS);
 }
 
-function scheduleStalenessRefresh() {
+function startStalenessTimer() {
   clearInterval(stalenessTimer);
   stalenessTimer = setInterval(updateStalenessIndicator, 1000);
 }
 
+function stopStalenessTimer() {
+  clearInterval(stalenessTimer);
+  stalenessTimer = null;
+}
+
+/* ---------- fill mode ---------- */
+
+let fillModeScrollY = 0;
+
+function resizeCharts() {
+  latencyChart?.resize();
+  jitterChart?.resize();
+  lossChart?.resize();
+  latencyBlocksChart?.resize();
+}
+
+function setFillMode(enabled, persist = true) {
+  if (enabled) {
+    fillModeScrollY = window.scrollY;
+    window.scrollTo(0, 0);
+  }
+
+  document.body.classList.toggle("fill-mode", enabled);
+  fillModeToggle.setAttribute("aria-pressed", String(enabled));
+  if (persist) {
+    localStorage.setItem(FILL_MODE_STORAGE_KEY, enabled ? "1" : "0");
+  }
+
+  // Nudge charts after the class toggle; ResizeObserver handles ongoing size changes.
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      resizeCharts();
+      if (!enabled) {
+        window.scrollTo(0, fillModeScrollY);
+      }
+    });
+  });
+}
+
+function initFillMode() {
+  setFillMode(localStorage.getItem(FILL_MODE_STORAGE_KEY) === "1", false);
+  fillModeToggle.addEventListener("click", () => {
+    setFillMode(!document.body.classList.contains("fill-mode"));
+  });
+}
+
+/* ---------- settings popover ---------- */
+
+/* Globally anycast resolvers with high availability — good proxies for
+   "is my internet connection healthy". The backend accepts any host/IP. */
+const TARGET_PRESETS = [
+  { label: "Cloudflare DNS", host: "1.1.1.1" },
+  { label: "Google DNS", host: "8.8.8.8" },
+  { label: "Quad9 DNS", host: "9.9.9.9" },
+  { label: "OpenDNS", host: "208.67.222.222" },
+];
+const CUSTOM_TARGET_VALUE = "__custom__";
+
+const settingsToggle = document.getElementById("settings-toggle");
+const settingsPopover = document.getElementById("settings-popover");
+const settingsPanel = settingsPopover?.querySelector(".settings-popover__panel");
+const settingsBackdrop = settingsPopover?.querySelector(".settings-popover__backdrop");
+const settingsForm = document.getElementById("settings-form");
+const settingsClose = document.getElementById("settings-close");
+const settingsCancel = document.getElementById("settings-cancel");
+const settingsSave = document.getElementById("settings-save");
+const settingsError = document.getElementById("settings-error");
+const targetPresetSelect = document.getElementById("settings-target-preset");
+const targetCustomField = document.getElementById("settings-custom-target-field");
+const targetCustomInput = document.getElementById("settings-target-custom");
+const settingsInputs = {
+  pingInterval: document.getElementById("settings-ping-interval"),
+  fullRefresh: document.getElementById("settings-full-refresh"),
+  connectionRefresh: document.getElementById("settings-connection-refresh"),
+  hiddenMultiplier: document.getElementById("settings-hidden-multiplier"),
+  logAge: document.getElementById("settings-log-age"),
+};
+
+/* Apply a /api/config payload to the UI and all polling timers. Used at
+   bootstrap and after saving settings — the timer chains read these values
+   on every cycle, so updates take effect without a reload. */
+function applyConfigPayload(config) {
+  currentConfig = config;
+  targetLabel.textContent = config.target;
+  populateWindowOptions(config.window_options ?? [5, 15, 30, 60, 120], config.default_window_minutes);
+  pollIntervalMs = Math.max(250, config.ping_interval_seconds * 1000);
+  if (config.full_refresh_seconds != null) {
+    FULL_REFRESH_MS = config.full_refresh_seconds * 1000;
+  }
+  if (config.connection_refresh_seconds != null) {
+    CONNECTION_REFRESH_MS = config.connection_refresh_seconds * 1000;
+  }
+  if (config.hidden_poll_multiplier != null) {
+    HIDDEN_POLL_MULTIPLIER = config.hidden_poll_multiplier;
+  }
+}
+
+function populateTargetPresets() {
+  targetPresetSelect.innerHTML = "";
+  for (const preset of TARGET_PRESETS) {
+    const option = document.createElement("option");
+    option.value = preset.host;
+    option.textContent = `${preset.label} — ${preset.host}`;
+    targetPresetSelect.appendChild(option);
+  }
+  const custom = document.createElement("option");
+  custom.value = CUSTOM_TARGET_VALUE;
+  custom.textContent = "Custom…";
+  targetPresetSelect.appendChild(custom);
+}
+
+function syncCustomTargetVisibility() {
+  targetCustomField.hidden = targetPresetSelect.value !== CUSTOM_TARGET_VALUE;
+}
+
+function positionSettingsPanel() {
+  if (!settingsPanel || !settingsToggle) return;
+
+  const rect = settingsToggle.getBoundingClientRect();
+  const panelRect = settingsPanel.getBoundingClientRect();
+  const margin = 12;
+  const gap = 10;
+
+  let top = rect.bottom + gap;
+  top = Math.max(margin, Math.min(top, window.innerHeight - panelRect.height - margin));
+
+  let left = rect.right - panelRect.width;
+  left = Math.max(margin, Math.min(left, window.innerWidth - panelRect.width - margin));
+
+  settingsPanel.style.top = `${top}px`;
+  settingsPanel.style.left = `${left}px`;
+}
+
+function showSettingsError(message) {
+  settingsError.textContent = message ?? "";
+  settingsError.hidden = !message;
+}
+
+function populateSettingsForm() {
+  const config = currentConfig ?? {};
+  const target = config.target ?? "";
+  const preset = TARGET_PRESETS.find((entry) => entry.host === target);
+  targetPresetSelect.value = preset ? preset.host : CUSTOM_TARGET_VALUE;
+  targetCustomInput.value = preset ? "" : target;
+  syncCustomTargetVisibility();
+
+  settingsInputs.pingInterval.value = String(config.ping_interval_seconds ?? pollIntervalMs / 1000);
+  settingsInputs.fullRefresh.value = String(config.full_refresh_seconds ?? FULL_REFRESH_MS / 1000);
+  settingsInputs.connectionRefresh.value = String(
+    config.connection_refresh_seconds ?? CONNECTION_REFRESH_MS / 1000,
+  );
+  settingsInputs.hiddenMultiplier.value = String(config.hidden_poll_multiplier ?? HIDDEN_POLL_MULTIPLIER);
+  settingsInputs.logAge.value = String(config.max_log_age_minutes ?? 180);
+}
+
+function openSettings() {
+  populateSettingsForm();
+  showSettingsError("");
+  settingsPopover.hidden = false;
+  settingsToggle.setAttribute("aria-expanded", "true");
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => positionSettingsPanel());
+  });
+}
+
+function closeSettings() {
+  if (settingsPopover.hidden) return;
+  settingsPopover.hidden = true;
+  settingsToggle.setAttribute("aria-expanded", "false");
+}
+
+function readSettingsNumber(input, label, errors) {
+  const value = Number(input.value);
+  if (input.value.trim() === "" || !Number.isFinite(value)) {
+    errors.push(`${label} must be a number`);
+    return null;
+  }
+  const min = Number(input.min);
+  const max = Number(input.max);
+  if (value < min || value > max) {
+    errors.push(`${label} must be between ${min} and ${max}`);
+    return null;
+  }
+  return value;
+}
+
+function collectSettingsPayload() {
+  const errors = [];
+
+  let target = targetPresetSelect.value;
+  if (target === CUSTOM_TARGET_VALUE) {
+    target = targetCustomInput.value.trim();
+    if (!target) {
+      errors.push("Custom target must not be empty");
+    }
+  }
+
+  const pingInterval = readSettingsNumber(settingsInputs.pingInterval, "Ping interval", errors);
+  const fullRefresh = readSettingsNumber(settingsInputs.fullRefresh, "Graph refresh", errors);
+  const connectionRefresh = readSettingsNumber(
+    settingsInputs.connectionRefresh,
+    "Connection info refresh",
+    errors,
+  );
+  const hiddenMultiplier = readSettingsNumber(
+    settingsInputs.hiddenMultiplier,
+    "Hidden-tab slowdown",
+    errors,
+  );
+  const logAge = readSettingsNumber(settingsInputs.logAge, "History kept", errors);
+
+  if (errors.length) {
+    showSettingsError(errors[0]);
+    return null;
+  }
+
+  return {
+    target,
+    ping_interval_seconds: pingInterval,
+    full_refresh_seconds: fullRefresh,
+    connection_refresh_seconds: connectionRefresh,
+    hidden_poll_multiplier: Math.round(hiddenMultiplier),
+    max_log_age_minutes: Math.round(logAge),
+  };
+}
+
+function formatSaveError(status, body) {
+  const detail = body?.detail;
+  if (typeof detail === "string") {
+    return detail;
+  }
+  if (Array.isArray(detail) && detail.length) {
+    const item = detail[0];
+    const field = Array.isArray(item.loc) ? item.loc[item.loc.length - 1] : "";
+    const message = String(item.msg ?? "invalid value").replace(/^Value error,\s*/, "");
+    return field ? `${field}: ${message}` : message;
+  }
+  return `Save failed (HTTP ${status})`;
+}
+
+async function saveSettings(event) {
+  event.preventDefault();
+  const payload = collectSettingsPayload();
+  if (!payload) return;
+
+  showSettingsError("");
+  settingsSave.disabled = true;
+  settingsSave.textContent = "Saving…";
+  try {
+    const response = await fetch("/api/config", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+      let body = null;
+      try {
+        body = await response.json();
+      } catch {
+        /* non-JSON error body */
+      }
+      showSettingsError(formatSaveError(response.status, body));
+      return;
+    }
+
+    applyConfigPayload(await response.json());
+    scheduleConnectionRefresh();
+    closeSettings();
+    poll(true);
+  } catch (error) {
+    console.error("Failed to save settings", error);
+    showSettingsError("Could not reach the server — settings not saved");
+  } finally {
+    settingsSave.disabled = false;
+    settingsSave.textContent = "Save";
+  }
+}
+
+function initSettings() {
+  if (!settingsToggle || !settingsPopover) return;
+
+  populateTargetPresets();
+  settingsToggle.addEventListener("click", openSettings);
+  targetPresetSelect.addEventListener("change", () => {
+    syncCustomTargetVisibility();
+    positionSettingsPanel();
+    if (!targetCustomField.hidden) {
+      targetCustomInput.focus();
+    }
+  });
+  settingsForm.addEventListener("submit", saveSettings);
+  settingsClose.addEventListener("click", closeSettings);
+  settingsCancel.addEventListener("click", closeSettings);
+  settingsBackdrop.addEventListener("click", closeSettings);
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") closeSettings();
+  });
+  window.addEventListener("resize", () => {
+    if (!settingsPopover.hidden) positionSettingsPanel();
+  });
+}
+
 async function bootstrap() {
+  initFillMode();
+  initSettings();
+  initHelpPopovers();
   initCharts();
   initHeartbeat();
 
   try {
     const configResponse = await fetch("/api/config");
     if (configResponse.ok) {
-      const config = await configResponse.json();
-      targetLabel.textContent = config.target;
-      populateWindowOptions(config.window_options ?? [5, 15, 30, 60, 120], config.default_window_minutes);
-      pollIntervalMs = Math.max(250, config.ping_interval_seconds * 1000);
+      applyConfigPayload(await configResponse.json());
     }
   } catch (error) {
     console.error("Failed to load config", error);
@@ -1483,7 +2317,20 @@ async function bootstrap() {
   await Promise.all([poll(true), refreshConnection()]);
   schedulePoll();
   scheduleConnectionRefresh();
-  scheduleStalenessRefresh();
+  if (!document.hidden) {
+    startStalenessTimer();
+  }
 }
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) {
+    stopStalenessTimer();
+  } else {
+    startStalenessTimer();
+    updateStalenessIndicator();
+    poll(true);
+  }
+  schedulePoll();
+});
 
 bootstrap();

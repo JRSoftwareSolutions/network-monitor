@@ -1,8 +1,11 @@
 import json
 import subprocess
+import sys
 import threading
 import time
 from typing import TypedDict
+
+CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
 
 
 class ActiveConnection(TypedDict):
@@ -52,10 +55,19 @@ if (-not $name) { $name = $adapter.Name }
 @{ type = $type; name = $name } | ConvertTo-Json -Compress
 """
 
-_CACHE_TTL_SECONDS = 30.0
+_CACHE_TTL_SECONDS = 300.0
 _cache_lock = threading.Lock()
 _cached_result: ActiveConnection | None = None
 _cached_at: float = 0.0
+
+
+def _ping_startupinfo() -> subprocess.STARTUPINFO | None:
+    if sys.platform != "win32":
+        return None
+    startupinfo = subprocess.STARTUPINFO()
+    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
+    startupinfo.wShowWindow = subprocess.SW_HIDE
+    return startupinfo
 
 
 def _fetch_active_connection() -> ActiveConnection:
@@ -67,6 +79,8 @@ def _fetch_active_connection() -> ActiveConnection:
             encoding="utf-8",
             errors="replace",
             timeout=5,
+            startupinfo=_ping_startupinfo(),
+            creationflags=CREATE_NO_WINDOW,
         )
         if result.returncode != 0:
             return {"type": None, "name": None}
