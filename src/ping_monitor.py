@@ -5,22 +5,25 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
-from src.metrics import MetricsLogger, JitterTracker
+from src.metrics import JitterTracker, MetricsLogger, SampleStore, read_samples
 
-LATENCY_PATTERN = re.compile(r"time[=<](\d+)ms", re.IGNORECASE)
+# Locale-neutral: matches time=14ms, tijd=14 ms, temps=14,5ms, etc.
+LATENCY_PATTERN = re.compile(r"[=<]\s*(\d+(?:[.,]\d+)?)\s*ms", re.IGNORECASE)
+SUB_MILLIS_PATTERN = re.compile(r"[=<]\s*1\s*ms", re.IGNORECASE)
 
 
-def parse_ping_output(output: str) -> tuple[bool, float | None]:
-    lower = output.lower()
-    if "request timed out" in lower or "100% loss" in lower or "general failure" in lower:
-        return False, None
+def parse_ping_output(output: str, returncode: int = 0) -> tuple[bool, float | None]:
+    if SUB_MILLIS_PATTERN.search(output):
+        if returncode not in (0, 1):
+            return False, None
+        return True, 0.5
 
     match = LATENCY_PATTERN.search(output)
     if match:
-        return True, float(match.group(1))
-
-    if "time<1ms" in lower:
-        return True, 0.5
+        latency = float(match.group(1).replace(",", "."))
+        if returncode not in (0, 1):
+            return False, None
+        return True, latency
 
     return False, None
 
@@ -34,7 +37,7 @@ def run_ping(target: str, timeout_ms: int = 1000) -> tuple[bool, float | None]:
         errors="replace",
     )
     output = result.stdout + result.stderr
-    return parse_ping_output(output)
+    return parse_ping_output(output, result.returncode)
 
 
 class PingMonitor:
@@ -53,6 +56,7 @@ class PingMonitor:
         self.target = target
         self.interval_seconds = interval_seconds
         self.ping_timeout_ms = ping_timeout_ms
+        self.max_log_age_minutes = max_log_age_minutes
         self._logger = MetricsLogger(
             log_file,
             max_log_age_minutes,
@@ -60,9 +64,22 @@ class PingMonitor:
             max_log_size_bytes=max_log_size_bytes,
             archive_dir=archive_dir,
         )
+        self._store = SampleStore(max_log_age_minutes)
+        self._seed_from_log(log_file)
         self._jitter = JitterTracker()
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
+
+    def _seed_from_log(self, log_file: Path) -> None:
+        samples = read_samples(log_file, self.max_log_age_minutes)
+        for sample in samples:
+            self._store.append(sample)
+
+    def get_samples(self, window_minutes: int) -> list[dict]:
+        return self._store.get_window(window_minutes)
+
+    def get_latest_sample(self) -> dict | None:
+        return self._store.latest()
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
@@ -91,6 +108,7 @@ class PingMonitor:
                 "latency_ms": latency_ms,
                 "jitter_ms": jitter_ms,
             }
+            self._store.append(sample)
             self._logger.append(sample)
 
             elapsed = time.monotonic() - started

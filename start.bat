@@ -10,8 +10,26 @@ if errorlevel 1 (
     exit /b 1
 )
 
+if not exist ".venv\Scripts\python.exe" (
+    echo Creating virtual environment...
+    python -m venv .venv
+    if errorlevel 1 (
+        echo Failed to create virtual environment.
+        pause
+        exit /b 1
+    )
+)
+
+echo Installing dependencies...
+".venv\Scripts\python.exe" -m pip install -q -r requirements.txt
+if errorlevel 1 (
+    echo Failed to install dependencies.
+    pause
+    exit /b 1
+)
+
 echo Starting Network Monitor...
-start "Network Monitor" cmd /k python -m src.server
+start "Network Monitor" cmd /k ".venv\Scripts\python.exe" -m src.server
 
 echo Waiting for server to start...
 timeout /t 2 /nobreak >nul

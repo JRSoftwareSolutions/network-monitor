@@ -1,6 +1,6 @@
 # Network Monitor
 
-Measures **latency**, **jitter**, and **packet loss** by pinging a configurable host. Results are appended to a JSON Lines log file and displayed in a live browser dashboard with a configurable rolling time window.
+Measures **latency**, **jitter**, and **packet loss** by pinging a configurable host. Results are kept in memory for fast API responses, persisted to a JSON Lines log file, and displayed in a live browser dashboard with a damped, gaming-aware **connection verdict**, a plain-language **current status** narrative, and a configurable rolling time window.
 
 ## Requirements
 
@@ -12,6 +12,8 @@ Measures **latency**, **jitter**, and **packet loss** by pinging a configurable 
 ```bash
 pip install -r requirements.txt
 ```
+
+Or double-click **`start.bat`** — it creates a local `.venv`, installs dependencies, starts the server, and opens the dashboard in your browser.
 
 ## Run
 
@@ -37,10 +39,12 @@ Edit [`config.yaml`](config.yaml):
 | `server_host` | Web server bind address | `127.0.0.1` |
 | `server_port` | Web server port | `8080` |
 | `default_window_minutes` | Default dashboard rolling window | `30` |
-| `max_log_age_minutes` | Move log entries older than this out of the live file | `60` |
+| `max_log_age_minutes` | Retain samples in memory and live log for this long | `180` |
 | `archive_enabled` | Write removed entries to timestamped archive files | `true` |
 | `max_log_size_mb` | Max live log file size before oldest entries are archived | `1` |
 | `archive_dir` | Directory for archived JSONL files | `logs/archive` |
+
+Rolling window options in the dashboard are limited to values ≤ `max_log_age_minutes` (5, 15, 30, 60, 120 minutes by default).
 
 ## Archiving
 
@@ -49,9 +53,9 @@ After each ping, the live log file is maintained to stay manageable:
 1. **Age-based** — entries older than `max_log_age_minutes` are removed from the live file.
 2. **Size-based** — if the live file still exceeds `max_log_size_mb`, the oldest remaining entries are removed until it is under the limit.
 
-When `archive_enabled` is `true` (default), removed entries are written to timestamped files under `archive_dir`, e.g. `logs/archive/metrics-2026-06-12T16-30-00.123Z.jsonl`. When disabled, removed entries are discarded (same as the previous trim-only behavior).
+Log maintenance runs at most once per minute (not on every ping). When `archive_enabled` is `true` (default), removed entries are written to timestamped files under `archive_dir`, e.g. `logs/archive/metrics-2026-06-12T16-30-00.123Z.jsonl`. When disabled, removed entries are discarded.
 
-The dashboard reads only the live log file; archives are kept for historical retention.
+The dashboard reads from an in-memory sample store (seeded from the live log on startup); archives are kept for historical retention.
 
 ## Log format
 
@@ -71,19 +75,64 @@ Fields:
 
 ## Dashboard
 
-- Poll interval matches `ping_interval_seconds` from config
-- Checks `/api/metrics/status` each interval and only loads full metrics when a new sample is available
-- Connection info refreshes every 30 seconds
-- Rolling window options: 5, 15, 30 (default), 60, 120 minutes
-- Window selection is saved in browser `localStorage`
-- Summary cards, latency/jitter chart, packet loss chart, and recent sample table
+Top to bottom:
+
+- **Status banner (hero)** — the *displayed* verdict (`Great for gaming` / `Good to game` / `Playable, expect hiccups` / `Rough — expect lag` / `Offline`) is stabilized with dwell-time hysteresis: downgrades commit after ~8 s of sustained worse readings, upgrades after ~20 s, so single pings can't flip it. Next to it, a smoothed **baseline ping** readout (60-second median — spikes don't move it) with an eased arc, tweened numbers, and an improving/steady/degrading trend pill (last 2 min vs the prior 10 min)
+- **Current status** — plain-language narrative explaining what's happening and what it means in-game (e.g. an isolated 150 ms spike is a single micro-hitch, not real lag), plus per-metric reason chips
+- **Key indicators** — Ping, Jitter, Packet loss, and Spike rate tiles, each with a rating badge, a one-line gameplay meaning, and a marker on a great→bad scale bar
+- **Live feed** — the raw micro view that *is* allowed to jump: last raw ping, instantaneous verdict chip, and a heartbeat strip of the last 60 pings colored by rating
+- **History** — selected-window stats with health chip, 1-minute candlesticks, latency/jitter chart with quality threshold bands (40/70/110 ms), packet loss chart, outage history, and recent samples
+
+Plus:
+
+- Live tab title (`28 ms · Good to game`) and a favicon dot that recolors with the verdict, so the tab works as a background monitor
+- Poll interval matches `ping_interval_seconds` from config; checks `/api/metrics/status` each interval and only loads full metrics when a new sample is available
+- Connection info refreshes every 30 seconds (cached server-side)
+- Rolling window options derived from `max_log_age_minutes`; selection saved in browser `localStorage`
+- "Updated Xs ago" staleness indicator
+
+### Gaming verdict thresholds
+
+Computed server-side over the last 120 seconds; the instant verdict is the worst rating across metrics. A ping counts as a **spike** when it exceeds `max(2.5× baseline, baseline + 80 ms)`, where baseline is the rolling median of the last 60 s — what's rated is the spike *rate*, not the single worst value.
+
+| Metric | Great | Good | Okay | Bad |
+|--------|-------|------|------|-----|
+| Baseline ping (median) | < 40 ms | < 70 ms | < 110 ms | ≥ 110 ms |
+| Avg jitter | < 8 ms | < 15 ms | < 30 ms | ≥ 30 ms |
+| Packet loss | 0% | < 1% | ≤ 3% | > 3% |
+| Spike rate | 0/min | < 1/min | ≤ 4/min | > 4/min |
+
+`Offline` is reported when 3+ pings fail in a row or no ping has succeeded for 30+ seconds, and commits to the displayed verdict immediately (it is already debounced).
 
 ## API
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/config` | Monitor configuration for the UI |
+| `GET /api/config` | Monitor configuration for the UI (includes `window_options`) |
+| `GET /api/connection` | Active network connection (WiFi/Ethernet + name) |
 | `GET /api/metrics/status` | Latest sample timestamp (lightweight poll check) |
-| `GET /api/metrics?windowMinutes=30` | Filtered samples and aggregated stats |
+| `GET /api/metrics?windowMinutes=30` | Filtered samples, stats, health, outages, and blocks |
+
+`/api/metrics` response includes:
+
+- `samples` — downsampled chart series (max ~1500 points)
+- `recent_samples` — last 60 raw ping samples (heartbeat strip + recent table)
+- `sample_count_raw` — full sample count in the window
+- `stats` — `packet_loss_pct`, `uptime_pct`, latency min/avg/max/p95, jitter avg, sample count
+- `health` — level (`healthy`, `degraded`, `poor`, `offline`, `no_data`), label, reasons
+- `now` — gaming readiness over the last 120s, independent of the selected window:
+  - `stats` — latest/avg/max ping, jitter, loss, tail failures
+  - `baseline_ms` — rolling 60 s median ping; `spike_threshold_ms`, `spike_count`, `spike_rate_per_min`, `worst_spike`
+  - `ratings` / `indicators` — per-metric level (`great`/`good`/`okay`/`bad`) with value, short text, and gameplay meaning
+  - `instant_verdict` — raw per-poll verdict (level, label, reasons)
+  - `display_verdict` — hysteresis-stabilized verdict (level, label, `since_seconds`, `pending` transition info)
+  - `trend` — `improving`/`steady`/`degrading` vs the prior 10 minutes, with latency/loss deltas
+  - `narrative` — headline, one-line summary, plain-language sentences, and reason chips
+- `outages` — consecutive failure runs with start/end, duration, failed count, ongoing flag
+- `blocks` — 1-minute bucket summaries for the candlestick chart
 
 Packet loss in stats is computed over the selected window: `(failed pings / total pings) × 100`.
+
+## Ping parsing
+
+Ping output is parsed with a locale-neutral pattern so non-English Windows locales (e.g. Dutch `tijd=14 ms`) are handled correctly.

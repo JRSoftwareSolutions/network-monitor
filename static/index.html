@@ -4,102 +4,404 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Network Monitor</title>
+  <link id="favicon" rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a101c'/%3E%3Cpath d='M6 20c4-6 8-9 10-9s6 3 10 9' stroke='%233de8ff' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='22' r='2.5' fill='%238fa3c2'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/static/style.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.2.1/dist/chartjs-chart-financial.min.js"></script>
 </head>
-<body>
-  <header class="header">
-    <div class="header-top">
-      <div class="header-title">
-        <h1>Network Monitor</h1>
-        <p class="subtitle">Target: <span id="target-label">—</span></p>
-        <p class="subtitle">Currently connected to: <span id="connection-label">—</span></p>
+<body data-level="no_data">
+  <div class="bg-glow" aria-hidden="true"></div>
+  <div class="bg-status" aria-hidden="true"></div>
+  <div class="bg-grid" aria-hidden="true"></div>
+
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand">
+        <svg class="brand-mark" viewBox="0 0 32 32" width="36" height="36" aria-hidden="true">
+          <rect x="0.5" y="0.5" width="31" height="31" rx="9" fill="rgba(61, 232, 255, 0.07)" stroke="rgba(61, 232, 255, 0.35)"/>
+          <path d="M6 20c4-6 8-9 10-9s6 3 10 9" stroke="#3de8ff" stroke-width="2.4" fill="none" stroke-linecap="round"/>
+          <circle cx="16" cy="22" r="2.6" fill="#3dffa2"/>
+        </svg>
+        <div class="brand-text">
+          <h1>Network Monitor</h1>
+          <p class="brand-sub">
+            <span id="connection-label">—</span>
+            <span class="brand-sep" aria-hidden="true">·</span>
+            target <span class="mono" id="target-label">—</span>
+          </p>
+        </div>
       </div>
       <div class="controls">
-        <label for="window-select">Rolling window</label>
-        <select id="window-select">
-          <option value="5">5 minutes</option>
-          <option value="15">15 minutes</option>
-          <option value="30" selected>30 minutes</option>
-          <option value="60">60 minutes</option>
-          <option value="120">120 minutes</option>
-        </select>
-        <span id="status-indicator" class="status">Connecting…</span>
+        <span id="status-indicator" class="status">
+          <span class="status-dot" aria-hidden="true"></span>
+          <span id="status-text">Connecting…</span>
+        </span>
+        <span id="updated-indicator" class="updated-indicator">—</span>
+        <label for="window-select">Window</label>
+        <select id="window-select"></select>
       </div>
-    </div>
-    <div id="health-bar" class="health-bar health-bar--no-data" role="status" aria-live="polite">
-      <span class="health-bar__dot" aria-hidden="true"></span>
-      <span id="health-label" class="health-bar__label">No data</span>
-      <span id="health-detail" class="health-bar__detail">Waiting for samples in the selected window…</span>
     </div>
   </header>
 
   <main>
-    <section class="cards" id="summary-cards">
-      <article class="card">
-        <h2>Current Latency</h2>
-        <p class="value" id="current-latency">—</p>
+    <!-- ====== 1 · stabilized verdict banner ====== -->
+    <section class="hero" id="hero" data-level="no_data" role="status" aria-live="polite">
+      <div class="hero-sweep" aria-hidden="true"></div>
+      <div class="hero-verdict">
+        <span class="hero-kicker"><span class="kicker-dot" aria-hidden="true"></span>connection status</span>
+        <h2 class="verdict-label" id="verdict-label">No data</h2>
+        <p class="verdict-detail">
+          <span class="verdict-detail-line mono">
+            <span class="verdict-detail-label">baseline</span>
+            <span class="verdict-detail-value dyn-slot dyn-slot--ms" id="verdict-baseline">—</span>
+            <span class="verdict-detail-sep" aria-hidden="true">·</span>
+            <span class="verdict-detail-label">jitter</span>
+            <span class="verdict-detail-value dyn-slot dyn-slot--ms-dec" id="verdict-jitter">—</span>
+            <span class="verdict-detail-sep" aria-hidden="true">·</span>
+            <span class="verdict-detail-label">loss</span>
+            <span class="verdict-detail-value dyn-slot dyn-slot--pct" id="verdict-loss">—</span>
+          </span>
+        </p>
+        <div class="hero-badges">
+          <span class="hero-badge hero-badge--slot" id="verdict-since" hidden>held <span class="dyn-slot dyn-slot--duration" id="verdict-since-val">—</span></span>
+          <span class="hero-badge hero-badge--pending hero-badge--slot" id="verdict-pending" hidden>
+            <span id="verdict-pending-label">checking</span>
+            <span class="dyn-slot dyn-slot--count" id="verdict-pending-sec">—</span>
+          </span>
+          <span class="hero-badge hero-badge--info">verdict is damped — single pings can't flip it</span>
+        </div>
+      </div>
+      <div class="hero-readout" id="hero-readout" data-rating="none">
+        <div class="readout-arc">
+          <svg class="arc-svg" viewBox="0 0 200 118" aria-hidden="true">
+            <path class="arc-track" d="M 16 108 A 84 84 0 0 1 184 108"/>
+            <path class="arc-zone arc-zone--great" d="M 16 108 A 84 84 0 0 1 184 108"
+                  stroke-dasharray="62.97 263.89" stroke-dashoffset="0"/>
+            <path class="arc-zone arc-zone--good" d="M 16 108 A 84 84 0 0 1 184 108"
+                  stroke-dasharray="62.97 263.89" stroke-dashoffset="-65.97"/>
+            <path class="arc-zone arc-zone--okay" d="M 16 108 A 84 84 0 0 1 184 108"
+                  stroke-dasharray="62.97 263.89" stroke-dashoffset="-131.95"/>
+            <path class="arc-zone arc-zone--bad" d="M 16 108 A 84 84 0 0 1 184 108"
+                  stroke-dasharray="62.97 263.89" stroke-dashoffset="-197.92"/>
+            <path class="arc-value" id="arc-value" d="M 16 108 A 84 84 0 0 1 184 108"/>
+            <text class="arc-tick" x="16" y="117" text-anchor="middle">0</text>
+            <text class="arc-tick" x="100" y="14" text-anchor="middle">70</text>
+            <text class="arc-tick" x="184" y="117" text-anchor="middle">200+</text>
+          </svg>
+          <div class="readout-center">
+            <span class="readout-value mono dyn-slot dyn-slot--hero-ms" id="baseline-value">—</span>
+            <span class="readout-unit mono">ms</span>
+          </div>
+        </div>
+        <p class="readout-caption">baseline ping <span class="readout-hint">60s median — single spikes can't move it</span></p>
+        <div class="readout-trend" id="trend-pill" data-trend="unknown">
+          <span class="trend-arrow" aria-hidden="true"></span>
+          <span class="trend-label" id="trend-label">trend pending</span>
+          <span class="trend-delta mono dyn-slot dyn-slot--delta" id="trend-delta" hidden></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====== 2 · current status narrative ====== -->
+    <section class="panel status-panel" id="status-panel" data-level="no_data">
+      <div class="status-head">
+        <h2><span class="status-pulse" aria-hidden="true"></span>Current status</h2>
+        <span class="status-headline mono" id="status-headline">Waiting for data</span>
+      </div>
+      <dl class="status-metrics" id="status-metrics">
+        <div class="status-row" data-metric="ping">
+          <dt>Baseline ping</dt>
+          <dd class="status-value mono"><span class="dyn-slot dyn-slot--ms" id="status-val-ping">—</span></dd>
+          <dd class="status-note" id="status-note-ping">—</dd>
+        </div>
+        <div class="status-row" data-metric="jitter">
+          <dt>Jitter</dt>
+          <dd class="status-value mono"><span class="dyn-slot dyn-slot--ms-dec" id="status-val-jitter">—</span></dd>
+          <dd class="status-note" id="status-note-jitter">—</dd>
+        </div>
+        <div class="status-row" data-metric="loss">
+          <dt>Packet loss</dt>
+          <dd class="status-value mono"><span class="dyn-slot dyn-slot--pct" id="status-val-loss">—</span></dd>
+          <dd class="status-note" id="status-note-loss">—</dd>
+        </div>
+        <div class="status-row" data-metric="spikes">
+          <dt>Spike rate</dt>
+          <dd class="status-value mono"><span class="dyn-slot dyn-slot--rate" id="status-val-spikes">—</span></dd>
+          <dd class="status-note" id="status-note-spikes">—</dd>
+        </div>
+        <div class="status-row" data-metric="trend">
+          <dt>Trend</dt>
+          <dd class="status-value mono"><span class="dyn-slot dyn-slot--trend" id="status-val-trend">—</span></dd>
+          <dd class="status-note" id="status-note-trend">—</dd>
+        </div>
+      </dl>
+      <p class="status-summary" id="status-summary">Waiting for the first pings to come in…</p>
+      <div class="status-pending-slot">
+        <p class="status-pending mono" id="status-pending" hidden>
+          <span id="status-pending-label">Checking</span>
+          <span class="dyn-slot dyn-slot--count" id="status-pending-sec">—</span>
+        </p>
+      </div>
+      <div class="status-chips" id="status-chips">
+        <span class="chip chip--slot" data-chip="ping" data-level="no_data" hidden>
+          <i class="chip-dot" aria-hidden="true"></i>
+          <span class="chip-name">ping</span>
+          <span class="chip-value mono dyn-slot dyn-slot--chip-ms">—</span>
+        </span>
+        <span class="chip chip--slot" data-chip="jitter" data-level="no_data" hidden>
+          <i class="chip-dot" aria-hidden="true"></i>
+          <span class="chip-name">jitter</span>
+          <span class="chip-value mono dyn-slot dyn-slot--chip-ms-dec">—</span>
+        </span>
+        <span class="chip chip--slot" data-chip="loss" data-level="no_data" hidden>
+          <i class="chip-dot" aria-hidden="true"></i>
+          <span class="chip-name">loss</span>
+          <span class="chip-value mono dyn-slot dyn-slot--chip-pct">—</span>
+        </span>
+        <span class="chip chip--slot" data-chip="spikes" data-level="no_data" hidden>
+          <i class="chip-dot" aria-hidden="true"></i>
+          <span class="chip-name">spikes</span>
+          <span class="chip-value mono dyn-slot dyn-slot--chip-rate">—</span>
+        </span>
+      </div>
+    </section>
+
+    <!-- ====== 3 · key indicators ====== -->
+    <section class="indicators" aria-label="Key indicators">
+      <article class="indicator" id="ind-ping" data-rating="none">
+        <header class="indicator-head">
+          <h3>Ping</h3>
+          <span class="indicator-badge" data-role="badge">—</span>
+        </header>
+        <p class="indicator-value"><span class="mono dyn-slot dyn-slot--indicator" data-role="value">—</span><span class="indicator-unit mono">ms</span></p>
+        <p class="indicator-meaning" data-role="meaning">waiting for data…</p>
+        <div class="indicator-scale" aria-hidden="true">
+          <div class="scale-track"></div>
+          <span class="scale-marker" data-role="marker"></span>
+        </div>
+        <p class="indicator-sub" data-role="sub">baseline · median of last 60s</p>
       </article>
-      <article class="card">
-        <h2>Avg Latency</h2>
-        <p class="value" id="avg-latency">—</p>
+
+      <article class="indicator" id="ind-jitter" data-rating="none">
+        <header class="indicator-head">
+          <h3>Jitter</h3>
+          <span class="indicator-badge" data-role="badge">—</span>
+        </header>
+        <p class="indicator-value"><span class="mono dyn-slot dyn-slot--indicator-dec" data-role="value">—</span><span class="indicator-unit mono">ms</span></p>
+        <p class="indicator-meaning" data-role="meaning">waiting for data…</p>
+        <div class="indicator-scale" aria-hidden="true">
+          <div class="scale-track"></div>
+          <span class="scale-marker" data-role="marker"></span>
+        </div>
+        <p class="indicator-sub" data-role="sub">timing stability · last 2 min</p>
       </article>
-      <article class="card">
-        <h2>Avg Jitter</h2>
-        <p class="value" id="avg-jitter">—</p>
+
+      <article class="indicator" id="ind-loss" data-rating="none">
+        <header class="indicator-head">
+          <h3>Packet loss</h3>
+          <span class="indicator-badge" data-role="badge">—</span>
+        </header>
+        <p class="indicator-value"><span class="mono dyn-slot dyn-slot--indicator-pct" data-role="value">—</span><span class="indicator-unit mono">%</span></p>
+        <p class="indicator-meaning" data-role="meaning">waiting for data…</p>
+        <div class="indicator-scale" aria-hidden="true">
+          <div class="scale-track"></div>
+          <span class="scale-marker" data-role="marker"></span>
+        </div>
+        <p class="indicator-sub" data-role="sub">failed pings · last 2 min</p>
       </article>
-      <article class="card">
-        <h2>Packet Loss</h2>
-        <p class="value" id="packet-loss">—</p>
-      </article>
-      <article class="card">
-        <h2>Samples</h2>
-        <p class="value" id="sample-count">—</p>
+
+      <article class="indicator" id="ind-spikes" data-rating="none">
+        <header class="indicator-head">
+          <h3>Spike rate</h3>
+          <span class="indicator-badge" data-role="badge">—</span>
+        </header>
+        <p class="indicator-value"><span class="mono dyn-slot dyn-slot--indicator-rate" data-role="value">—</span><span class="indicator-unit mono">/min</span></p>
+        <p class="indicator-meaning" data-role="meaning">waiting for data…</p>
+        <div class="indicator-scale" aria-hidden="true">
+          <div class="scale-track"></div>
+          <span class="scale-marker" data-role="marker"></span>
+        </div>
+        <p class="indicator-sub" data-role="sub">
+          worst <span class="mono dyn-slot dyn-slot--ms" data-role="worst">—</span>
+          · spike &gt; <span class="mono dyn-slot dyn-slot--ms" data-role="threshold">—</span>
+        </p>
       </article>
     </section>
 
+    <!-- ====== 4 · live feed (raw, allowed to jump) ====== -->
+    <section class="panel live-panel">
+      <div class="panel-head">
+        <div>
+          <h2>Live feed</h2>
+          <p class="panel-subtitle">raw per-ping data — this row is <em>allowed</em> to jump</p>
+        </div>
+        <span class="instant-chip" id="instant-chip" data-level="no_data">
+          <span class="chip-dot" aria-hidden="true"></span>
+          <span id="instant-chip-label">No data</span>
+          <span class="instant-chip-note">instant read</span>
+        </span>
+      </div>
+      <div class="live-grid">
+        <div class="live-ticker">
+          <span class="live-ticker-name">last ping</span>
+          <p class="live-ticker-value"><span class="mono dyn-slot dyn-slot--live-ping" id="live-ping" data-rating="none">—</span><span class="live-ticker-unit mono">ms</span></p>
+          <span class="live-ticker-sub mono dyn-slot dyn-slot--time" id="live-ping-sub">—</span>
+        </div>
+        <div class="heartbeat-wrap">
+          <div class="heartbeat" id="heartbeat" aria-hidden="true"></div>
+          <div class="heartbeat-meta">
+            <span class="heartbeat-caption mono">last 60 pings · newest on the right</span>
+            <span class="heartbeat-legend mono">
+              <span class="legend-item"><i class="legend-dot legend-dot--great"></i>&lt;40</span>
+              <span class="legend-item"><i class="legend-dot legend-dot--good"></i>&lt;70</span>
+              <span class="legend-item"><i class="legend-dot legend-dot--okay"></i>&lt;110</span>
+              <span class="legend-item"><i class="legend-dot legend-dot--bad"></i>≥110</span>
+              <span class="legend-item"><i class="legend-dot legend-dot--fail"></i>fail</span>
+            </span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====== 5 · history ====== -->
     <section class="panel">
-      <h2>Latency Blocks (last 5 min)</h2>
-      <p class="panel-subtitle">1-minute candles — color reflects quality (green = good, yellow = fair, red = poor) based on latency, jitter, and packet loss</p>
+      <div class="panel-head">
+        <div>
+          <h2>Selected window</h2>
+          <p class="panel-subtitle">Stability over the last <span id="window-label">—</span> minutes</p>
+        </div>
+        <div class="health-chip health-chip--no_data" id="health-chip">
+          <span class="health-dot" aria-hidden="true"></span>
+          <span id="health-label">No data</span>
+          <span class="health-detail" id="health-detail"></span>
+        </div>
+      </div>
+      <div class="stats-strip">
+        <div class="stat">
+          <span class="stat-name">Avg latency</span>
+          <span class="stat-value mono" id="avg-latency">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-name">Min</span>
+          <span class="stat-value mono" id="min-latency">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-name">Max</span>
+          <span class="stat-value mono" id="max-latency">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-name">P95</span>
+          <span class="stat-value mono" id="p95-latency">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-name">Avg jitter</span>
+          <span class="stat-value mono" id="avg-jitter">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-name">Packet loss</span>
+          <span class="stat-value mono" id="packet-loss">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-name">Uptime</span>
+          <span class="stat-value mono" id="uptime-pct">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-name">Samples</span>
+          <span class="stat-value mono" id="sample-count">—</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <div>
+          <h2 id="blocks-panel-title">Latency blocks</h2>
+          <p class="panel-subtitle">1-minute candles — green is good, amber is fair, red is poor (latency + jitter + loss)</p>
+        </div>
+      </div>
       <div class="chart-wrap chart-wrap--short">
         <canvas id="latency-blocks-chart"></canvas>
       </div>
     </section>
 
     <section class="panel">
-      <h2>Latency &amp; Jitter</h2>
+      <div class="panel-head">
+        <div>
+          <h2>Latency &amp; jitter</h2>
+          <p class="panel-subtitle">Per-ping round trip time with quality bands — failures marked in red</p>
+        </div>
+      </div>
       <div class="chart-wrap">
         <canvas id="latency-chart"></canvas>
       </div>
     </section>
 
     <section class="panel">
-      <h2>Packet Loss</h2>
+      <div class="panel-head">
+        <div>
+          <h2>Packet loss</h2>
+          <p class="panel-subtitle">Rolling loss across the selected window</p>
+        </div>
+      </div>
       <div class="chart-wrap chart-wrap--short">
         <canvas id="loss-chart"></canvas>
       </div>
     </section>
 
-    <section class="panel">
-      <h2>Recent Samples</h2>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Latency</th>
-              <th>Jitter</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody id="recent-table">
-            <tr><td colspan="4" class="empty">Waiting for data…</td></tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <div class="tables-grid">
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Outages</h2>
+            <p class="panel-subtitle">Consecutive failure runs in the selected window</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Start</th>
+                <th>End</th>
+                <th>Duration</th>
+                <th>Failed pings</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="outages-table">
+              <tr><td colspan="5" class="empty">No outages in this window</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Recent samples</h2>
+            <p class="panel-subtitle">Last 20 pings, newest first</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Latency</th>
+                <th>Jitter</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="recent-table">
+              <tr><td colspan="4" class="empty">Waiting for data…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
   </main>
 
   <script src="/static/app.js"></script>

@@ -1,5 +1,7 @@
 import json
 import subprocess
+import threading
+import time
 from typing import TypedDict
 
 
@@ -50,8 +52,13 @@ if (-not $name) { $name = $adapter.Name }
 @{ type = $type; name = $name } | ConvertTo-Json -Compress
 """
 
+_CACHE_TTL_SECONDS = 30.0
+_cache_lock = threading.Lock()
+_cached_result: ActiveConnection | None = None
+_cached_at: float = 0.0
 
-def get_active_connection() -> ActiveConnection:
+
+def _fetch_active_connection() -> ActiveConnection:
     try:
         result = subprocess.run(
             ["powershell", "-NoProfile", "-Command", _DETECT_SCRIPT],
@@ -59,7 +66,7 @@ def get_active_connection() -> ActiveConnection:
             text=True,
             encoding="utf-8",
             errors="replace",
-            timeout=15,
+            timeout=5,
         )
         if result.returncode != 0:
             return {"type": None, "name": None}
@@ -77,3 +84,18 @@ def get_active_connection() -> ActiveConnection:
         return {"type": connection_type, "name": name}
     except (json.JSONDecodeError, subprocess.TimeoutExpired, OSError):
         return {"type": None, "name": None}
+
+
+def get_active_connection() -> ActiveConnection:
+    global _cached_result, _cached_at
+
+    now = time.monotonic()
+    with _cache_lock:
+        if _cached_result is not None and (now - _cached_at) < _CACHE_TTL_SECONDS:
+            return _cached_result
+
+    result = _fetch_active_connection()
+    with _cache_lock:
+        _cached_result = result
+        _cached_at = now
+    return result
