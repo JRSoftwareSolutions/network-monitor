@@ -101,6 +101,7 @@ _TARGET_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:\-]{0,252}$")
 
 class ScreenshotUpload(BaseModel):
     image: str = Field(min_length=32, max_length=20_000_000)
+    label: str | None = Field(default=None, max_length=64)
 
 
 class SettingsUpdate(BaseModel):
@@ -270,7 +271,10 @@ async def api_screenshot(body: ScreenshotUpload):
         raise HTTPException(status_code=400, detail="Screenshot must be a PNG image")
 
     SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-    filename = f"dashboard-{datetime.now().strftime('%Y%m%d-%H%M%S')}.png"
+    label = (body.label or "dashboard").strip().lower()
+    label = re.sub(r"[^a-z0-9_-]+", "-", label).strip("-_") or "dashboard"
+    label = label[:48]
+    filename = f"{label}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.png"
     path = SCREENSHOTS_DIR / filename
     path.write_bytes(png_bytes)
     return {"filename": filename, "path": str(path.resolve())}

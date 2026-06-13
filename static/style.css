@@ -218,6 +218,8 @@ body {
   padding: 0.42rem 0.6rem;
   font-family: var(--font-ui);
   font-size: 0.85rem;
+  line-height: 1.2;
+  min-height: 2.15rem;
 }
 
 .controls select:focus-visible {
@@ -499,6 +501,7 @@ main > * {
 /* ---------- hero: smoothed baseline readout ---------- */
 
 .hero-readout {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1638,6 +1641,7 @@ main > * {
 /* ---------- panels ---------- */
 
 .panel {
+  position: relative;
   background: linear-gradient(170deg, rgba(16, 24, 40, 0.8), rgba(9, 13, 23, 0.85));
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -1710,6 +1714,74 @@ main > * {
   color: var(--accent);
   border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
   box-shadow: 0 0 24px -10px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.block-screenshot-btn {
+  flex-shrink: 0;
+  width: 1.35rem;
+  height: 1.35rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.block-screenshot-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.block-screenshot-btn:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent);
+  outline-offset: 2px;
+}
+
+.block-screenshot-btn:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.block-screenshot-btn--corner {
+  position: absolute;
+  top: 0.85rem;
+  right: 0.85rem;
+  z-index: 2;
+}
+
+.block-screenshot-btn[data-state="copied"] {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--border));
+}
+
+.block-screenshot-btn[data-state="failed"] {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 55%, var(--border));
+}
+
+body.is-capturing-screenshot .controls select {
+  pointer-events: none;
+}
+
+.screenshot-select-replacement {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  background: rgba(10, 16, 28, 0.8);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  padding: 0.42rem 0.6rem;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  line-height: 1.2;
+  white-space: nowrap;
 }
 
 /* ---------- window health chip ---------- */
@@ -2446,4 +2518,46 @@ body.fill-mode .panel--latency .chart-meta {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ---------- screenshot capture (html2canvas-safe overrides) ---------- */
+
+.is-screenshot-capture,
+.is-screenshot-capture * {
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  animation: none !important;
+}
+
+.is-screenshot-capture.indicator {
+  background:
+    radial-gradient(ellipse 95% 75% at 50% -5%, color-mix(in srgb, var(--tile) 22%, transparent), transparent 62%),
+    linear-gradient(170deg, rgb(16, 24, 40), rgb(9, 13, 23));
+  box-shadow: none;
+  border-color: color-mix(in srgb, var(--tile) 32%, rgb(35, 48, 72));
+}
+
+.is-screenshot-capture.indicator::after {
+  display: none;
+}
+
+.is-screenshot-capture.panel {
+  background: linear-gradient(170deg, rgb(16, 24, 40), rgb(9, 13, 23));
+  box-shadow: none;
+}
+
+.is-screenshot-capture.hero {
+  background:
+    radial-gradient(140% 200% at 0% 0%, color-mix(in srgb, var(--level) 12%, transparent), transparent 55%),
+    linear-gradient(165deg, rgb(16, 24, 40), rgb(8, 12, 22));
+  box-shadow: none;
+}
+
+.is-screenshot-capture.hero::before,
+.is-screenshot-capture .hero-sweep {
+  display: none !important;
+}
+
+.is-screenshot-capture.status-panel::before {
+  display: none;
 }
