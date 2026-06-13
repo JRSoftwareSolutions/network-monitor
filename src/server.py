@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 
 import uvicorn
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
@@ -235,9 +235,17 @@ app = FastAPI(title="Network Monitor", lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
+def _render_index_html() -> str:
+    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    for name in ("history-panels", "overlays"):
+        fragment = (STATIC_DIR / "partials" / f"{name}.html").read_text(encoding="utf-8")
+        html = html.replace(f"<!-- include:{name} -->", fragment)
+    return html
+
+
 @app.get("/")
 async def index():
-    return FileResponse(STATIC_DIR / "index.html")
+    return HTMLResponse(_render_index_html())
 
 
 def _config_payload() -> dict:

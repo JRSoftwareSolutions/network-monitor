@@ -1,0 +1,48 @@
+/* =====================================================================
+   Network Monitor — sleek stable gaming dashboard
+   Theming model:
+   - [data-level]  → sets --level  (verdict color: hero, status panel, chips)
+   - [data-rating] → sets --tile / --rating (per-metric color: indicators, readout)
+   Mapping rules live at the BOTTOM of this file so they win specificity ties.
+   ===================================================================== */
+
+:root {
+  color-scheme: dark;
+  --bg: #04060c;
+  --panel: rgba(13, 19, 32, 0.66);
+  --panel-deep: rgba(9, 14, 24, 0.55);
+  --border: rgba(126, 164, 222, 0.13);
+  --border-strong: rgba(126, 164, 222, 0.28);
+  --text: #eaf2ff;
+  --muted: #8fa3c2;
+  --faint: #5a6c8c;
+  --accent: #3de8ff;
+  --great: #3dffa2;
+  --good: #4fd1ff;
+  --okay: #ffc24d;
+  --bad: #ff5d6c;
+  --offline: #ff3355;
+  --font-ui: "Outfit", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", Consolas, monospace;
+  --input-bg: rgba(10, 16, 28, 0.8);
+  --panel-gradient: linear-gradient(170deg, rgba(16, 24, 40, 0.92), rgba(9, 13, 23, 0.95));
+}
+
+/* Registered so gradient colors interpolate smoothly between levels. */
+@property --level {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #8fa3c2;
+}
+
+@property --tile {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #5a6c8c;
+}
+
+@property --rating {
+  syntax: "<color>";
+  inherits: true;
+  initial-value: #5a6c8c;
+}

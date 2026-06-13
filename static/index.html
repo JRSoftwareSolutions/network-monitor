@@ -8,7 +8,12 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/css/tokens.css">
+  <link rel="stylesheet" href="/static/css/base.css">
+  <link rel="stylesheet" href="/static/css/components.css">
+  <link rel="stylesheet" href="/static/css/views.css">
+  <link rel="stylesheet" href="/static/css/view-builder.css">
+  <link rel="stylesheet" href="/static/css/overrides.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.2.1/dist/chartjs-chart-financial.min.js"></script>
@@ -36,12 +41,16 @@
         </div>
       </div>
       <div class="controls">
-        <button id="fill-mode-toggle" class="fill-toggle" type="button" aria-pressed="false">
-          <svg class="fill-toggle-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-            <path d="M2 6V3.5A1.5 1.5 0 0 1 3.5 2H6M10 2h2.5A1.5 1.5 0 0 1 14 3.5V6M14 10v2.5a1.5 1.5 0 0 1-1.5 1.5H10M6 14H3.5A1.5 1.5 0 0 1 2 12.5V10"
-                  fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+        <label for="view-select">View</label>
+        <select id="view-select" aria-label="Dashboard view"></select>
+        <button id="layout-toggle" class="layout-toggle" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="layout-dialog">
+          <svg class="layout-toggle-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+            <rect x="1.5" y="2" width="5" height="4.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/>
+            <rect x="9.5" y="2" width="5" height="4.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/>
+            <rect x="1.5" y="9.5" width="5" height="4.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/>
+            <rect x="9.5" y="9.5" width="5" height="4.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/>
           </svg>
-          Fill mode
+          <span class="layout-toggle-label">Layout</span>
         </button>
         <span id="status-indicator" class="status">
           <span class="status-dot" aria-hidden="true"></span>
@@ -77,12 +86,12 @@
 
   <main>
     <!-- ====== 1 · stabilized verdict banner ====== -->
-    <section class="hero" id="hero" data-level="no_data" role="status" aria-live="polite">
+    <section class="hero" id="hero" data-panel="hero" data-level="no_data" role="status" aria-live="polite">
       <div class="hero-sweep" aria-hidden="true"></div>
       <div class="hero-verdict">
-        <span class="hero-kicker"><span class="kicker-dot" aria-hidden="true"></span>connection status</span>
+        <span class="hero-kicker" id="hero-kicker"><span class="kicker-dot" aria-hidden="true"></span>connection status</span>
         <h2 class="verdict-label" id="verdict-label">No data</h2>
-        <p class="verdict-detail">
+        <p class="verdict-detail" id="verdict-detail-live">
           <span class="verdict-detail-line mono">
             <span class="verdict-detail-label">baseline</span>
             <span class="verdict-detail-value dyn-slot dyn-slot--ms" id="verdict-baseline">—</span>
@@ -93,6 +102,9 @@
             <span class="verdict-detail-label">loss</span>
             <span class="verdict-detail-value dyn-slot dyn-slot--pct" id="verdict-loss">—</span>
           </span>
+        </p>
+        <p class="verdict-detail verdict-detail--window" id="window-summary-detail" hidden>
+          <span class="verdict-detail-line mono" id="window-summary-narrative">—</span>
         </p>
         <div class="hero-badges">
           <span class="hero-badge hero-badge--slot" id="verdict-since" hidden>held <span class="dyn-slot dyn-slot--duration" id="verdict-since-val">—</span></span>
@@ -125,7 +137,7 @@
             <span class="readout-unit mono">ms</span>
           </div>
         </div>
-        <p class="readout-caption">baseline ping <span class="readout-hint">60s median — single spikes can't move it</span></p>
+        <p class="readout-caption" id="readout-caption">baseline ping <span class="readout-hint">60s median — single spikes can't move it</span></p>
         <div class="readout-trend" id="trend-pill" data-trend="unknown">
           <span class="trend-arrow" aria-hidden="true"></span>
           <span class="trend-label" id="trend-label">trend pending</span>
@@ -135,7 +147,7 @@
     </section>
 
     <!-- ====== 2 · current status narrative ====== -->
-    <section class="panel status-panel" id="status-panel" data-level="no_data">
+    <section class="panel status-panel" id="status-panel" data-panel="status" data-level="no_data">
       <div class="status-head">
         <h2><span class="status-pulse" aria-hidden="true"></span>Current status</h2>
         <span class="status-headline mono" id="status-headline">Waiting for data</span>
@@ -199,7 +211,7 @@
     </section>
 
     <!-- ====== 3 · key indicators ====== -->
-    <section class="indicators" aria-label="Key indicators">
+    <section class="indicators" data-panel="indicators" aria-label="Key indicators">
       <article class="indicator indicator--help" id="ind-ping" data-rating="none" data-metric="ping" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false">
         <header class="indicator-head">
           <h3>Ping</h3>
@@ -261,7 +273,7 @@
     </section>
 
     <!-- ====== 4 · live feed (raw, allowed to jump) ====== -->
-    <section class="panel live-panel">
+    <section class="panel live-panel" data-panel="live">
       <div class="panel-head">
         <div>
           <div class="panel-title-row">
@@ -300,246 +312,22 @@
       </div>
     </section>
 
-    <!-- ====== 5 · history ====== -->
-    <section class="panel panel--stats">
-      <div class="panel-head">
-        <div>
-          <h2>Selected window</h2>
-          <p class="panel-subtitle">Stability over the last <span id="window-label">—</span> minutes</p>
-        </div>
-        <div class="health-chip health-chip--no_data" id="health-chip">
-          <span class="health-dot" aria-hidden="true"></span>
-          <span id="health-label">No data</span>
-          <span class="health-detail" id="health-detail"></span>
-        </div>
-      </div>
-      <div class="stats-strip">
-        <div class="stat">
-          <span class="stat-name">Avg latency</span>
-          <span class="stat-value mono" id="avg-latency">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-name">Min</span>
-          <span class="stat-value mono" id="min-latency">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-name">Max</span>
-          <span class="stat-value mono" id="max-latency">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-name">P95</span>
-          <span class="stat-value mono" id="p95-latency">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-name">Avg jitter</span>
-          <span class="stat-value mono" id="avg-jitter">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-name">Packet loss</span>
-          <span class="stat-value mono" id="packet-loss">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-name">Uptime</span>
-          <span class="stat-value mono" id="uptime-pct">—</span>
-        </div>
-        <div class="stat">
-          <span class="stat-name">Samples</span>
-          <span class="stat-value mono" id="sample-count">—</span>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel panel--blocks">
-      <div class="panel-head">
-        <div>
-          <div class="panel-title-row">
-            <h2 id="blocks-panel-title">Latency blocks</h2>
-            <button type="button" class="panel-help-btn" data-help="latency-blocks" aria-label="About Latency blocks" aria-haspopup="dialog" aria-expanded="false">
-              <span aria-hidden="true">i</span>
-            </button>
-          </div>
-          <p class="panel-subtitle">1-minute candles — green is good, amber is fair, red is poor (latency + jitter + loss)</p>
-        </div>
-      </div>
-      <div class="chart-wrap chart-wrap--short">
-        <canvas id="latency-blocks-chart"></canvas>
-      </div>
-    </section>
-
-    <section class="panel panel--latency">
-      <div class="panel-head">
-        <div>
-          <div class="panel-title-row">
-            <h2>Latency</h2>
-            <button type="button" class="panel-help-btn" data-help="latency" aria-label="About Latency" aria-haspopup="dialog" aria-expanded="false">
-              <span aria-hidden="true">i</span>
-            </button>
-          </div>
-          <p class="panel-subtitle">Per-ping round trip time with ±jitter band — failed pings shown as red strips</p>
-        </div>
-      </div>
-      <div class="chart-wrap chart-wrap--latency">
-        <canvas id="latency-chart"></canvas>
-      </div>
-      <div class="chart-meta mono" aria-hidden="true">
-        <span class="chart-legend">
-          <span class="legend-item"><i class="legend-dot legend-dot--latency-line"></i>latency</span>
-          <span class="legend-item"><i class="legend-dot legend-dot--jitter-band"></i>± jitter</span>
-          <span class="legend-item"><i class="legend-dot legend-dot--fail"></i>failed ping</span>
-        </span>
-      </div>
-    </section>
-
-    <section class="panel panel--jitter">
-      <div class="panel-head">
-        <div>
-          <div class="panel-title-row">
-            <h2>Jitter</h2>
-            <button type="button" class="panel-help-btn" data-help="jitter-chart" aria-label="About Jitter" aria-haspopup="dialog" aria-expanded="false">
-              <span aria-hidden="true">i</span>
-            </button>
-          </div>
-          <p class="panel-subtitle">Timing variation between pings — lower is steadier</p>
-        </div>
-      </div>
-      <div class="chart-wrap chart-wrap--short">
-        <canvas id="jitter-chart"></canvas>
-      </div>
-    </section>
-
-    <section class="panel panel--loss">
-      <div class="panel-head">
-        <div>
-          <div class="panel-title-row">
-            <h2>Packet loss</h2>
-            <button type="button" class="panel-help-btn" data-help="loss-chart" aria-label="About Packet loss" aria-haspopup="dialog" aria-expanded="false">
-              <span aria-hidden="true">i</span>
-            </button>
-          </div>
-          <p class="panel-subtitle">Loss per minute — bar color shows severity</p>
-        </div>
-      </div>
-      <div class="chart-wrap chart-wrap--short">
-        <canvas id="loss-chart"></canvas>
-      </div>
-    </section>
-
-    <div class="tables-grid">
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>Outages</h2>
-            <p class="panel-subtitle">Red pulse = ongoing outage · duration &amp; failures colored by severity</p>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Start</th>
-                <th>End</th>
-                <th>Duration</th>
-                <th>Failed pings</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody id="outages-table">
-              <tr><td colspan="5" class="empty">No outages in this window</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head">
-          <div>
-            <h2>Recent samples</h2>
-            <p class="panel-subtitle">Green rows = OK, red = failed · latency &amp; jitter colored by quality</p>
-          </div>
-        </div>
-        <div class="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Latency</th>
-                <th>Jitter</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody id="recent-table">
-              <tr><td colspan="4" class="empty">Waiting for data…</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </section>
-    </div>
+    <!-- include:history-panels -->
   </main>
 
-  <div id="settings-popover" class="settings-popover" role="dialog" aria-modal="true" aria-labelledby="settings-popover-title" hidden>
-    <button type="button" class="settings-popover__backdrop" aria-label="Close" tabindex="-1"></button>
-    <form id="settings-form" class="settings-popover__panel" novalidate>
-      <header class="settings-popover__head">
-        <h3 id="settings-popover-title" class="settings-popover__title">Settings</h3>
-        <button type="button" id="settings-close" class="settings-popover__close" aria-label="Close">×</button>
-      </header>
-      <div class="settings-popover__body">
-        <div class="settings-field">
-          <label for="settings-target-preset">Ping target</label>
-          <select id="settings-target-preset"></select>
-          <p class="settings-field-hint">Anycast DNS servers are a reliable yardstick for general internet health — or pick Custom to watch a specific server.</p>
-        </div>
-        <div class="settings-field" id="settings-custom-target-field" hidden>
-          <label for="settings-target-custom">Custom host or IP</label>
-          <input type="text" id="settings-target-custom" placeholder="e.g. 192.168.1.1 or eu.example.com"
-                 spellcheck="false" autocomplete="off" autocapitalize="off">
-        </div>
-        <div class="settings-grid">
-          <div class="settings-field">
-            <label for="settings-ping-interval">Ping interval (s)</label>
-            <input type="number" id="settings-ping-interval" min="0.1" max="3600" step="0.1" inputmode="decimal">
-          </div>
-          <div class="settings-field">
-            <label for="settings-full-refresh">Graph refresh (s)</label>
-            <input type="number" id="settings-full-refresh" min="1" max="3600" step="1" inputmode="numeric">
-          </div>
-          <div class="settings-field">
-            <label for="settings-connection-refresh">Connection info (s)</label>
-            <input type="number" id="settings-connection-refresh" min="1" max="3600" step="1" inputmode="numeric">
-          </div>
-          <div class="settings-field">
-            <label for="settings-hidden-multiplier">Hidden-tab slowdown (×)</label>
-            <input type="number" id="settings-hidden-multiplier" min="1" max="60" step="1" inputmode="numeric">
-          </div>
-          <div class="settings-field">
-            <label for="settings-log-age">History kept (min)</label>
-            <input type="number" id="settings-log-age" min="5" max="10080" step="5" inputmode="numeric">
-          </div>
-        </div>
-        <p class="settings-error mono" id="settings-error" hidden></p>
-      </div>
-      <footer class="settings-popover__foot">
-        <p class="settings-note">Saved to <span class="mono">config.yaml</span> · applies live</p>
-        <div class="settings-actions">
-          <button type="button" id="settings-cancel" class="settings-btn">Cancel</button>
-          <button type="submit" id="settings-save" class="settings-btn settings-btn--primary">Save</button>
-        </div>
-      </footer>
-    </form>
-  </div>
-
-  <div id="metric-popover" class="metric-popover" role="dialog" aria-modal="true" aria-labelledby="metric-popover-title" hidden>
-    <button type="button" class="metric-popover__backdrop" aria-label="Close" tabindex="-1"></button>
-    <div class="metric-popover__panel">
-      <header class="metric-popover__head">
-        <h3 id="metric-popover-title" class="metric-popover__title"></h3>
-        <button type="button" class="metric-popover__close" aria-label="Close">×</button>
-      </header>
-      <div id="metric-popover-body" class="metric-popover__body"></div>
-    </div>
-  </div>
+  <!-- include:overlays -->
 
   <script src="https://cdn.jsdelivr.net/npm/html2canvas-pro@1.5.8/dist/html2canvas-pro.min.js"></script>
+  <script src="/static/js/constants.js"></script>
+  <script src="/static/js/rating-format.js"></script>
+  <script src="/static/js/chart-plugins.js"></script>
+  <script src="/static/js/screenshot.js"></script>
+  <script src="/static/js/view-builder.js"></script>
+  <script src="/static/js/app-state.js"></script>
+  <script src="/static/js/app-ui-verdict.js"></script>
+  <script src="/static/js/app-ui-live.js"></script>
+  <script src="/static/js/app-charts.js"></script>
+  <script src="/static/js/app-window.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

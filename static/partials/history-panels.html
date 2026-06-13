@@ -1,0 +1,352 @@
+    <!-- ====== 5 · history ====== -->
+    <section class="panel panel--stats" data-panel="stats">
+      <div class="panel-head">
+        <div>
+          <h2>Selected window</h2>
+          <p class="panel-subtitle">Stability over the last <span id="window-label">—</span> minutes</p>
+        </div>
+        <div class="health-chip health-chip--no_data" id="health-chip">
+          <span class="health-dot" aria-hidden="true"></span>
+          <span id="health-label">No data</span>
+          <span class="health-detail" id="health-detail"></span>
+        </div>
+      </div>
+      <div class="stats-strip">
+        <div class="stat">
+          <span class="stat-name">Avg latency</span>
+          <span class="stat-value mono" id="avg-latency">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-name">Min</span>
+          <span class="stat-value mono" id="min-latency">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-name">Max</span>
+          <span class="stat-value mono" id="max-latency">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-name">P95</span>
+          <span class="stat-value mono" id="p95-latency">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-name">Avg jitter</span>
+          <span class="stat-value mono" id="avg-jitter">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-name">Packet loss</span>
+          <span class="stat-value mono" id="packet-loss">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-name">Uptime</span>
+          <span class="stat-value mono" id="uptime-pct">—</span>
+        </div>
+        <div class="stat">
+          <span class="stat-name">Samples</span>
+          <span class="stat-value mono" id="sample-count">—</span>
+        </div>
+      </div>
+      <div class="quality-breakdown" id="quality-breakdown">
+        <div class="quality-breakdown-label mono">Minute quality</div>
+        <div class="quality-breakdown-bar" id="quality-breakdown-bar" role="img" aria-label="Minute quality breakdown">
+          <div class="quality-breakdown-seg quality-breakdown-seg--good" id="breakdown-good"></div>
+          <div class="quality-breakdown-seg quality-breakdown-seg--fair" id="breakdown-fair"></div>
+          <div class="quality-breakdown-seg quality-breakdown-seg--poor" id="breakdown-poor"></div>
+          <div class="quality-breakdown-seg quality-breakdown-seg--empty" id="breakdown-empty"></div>
+        </div>
+        <div class="quality-breakdown-legend mono" id="quality-breakdown-legend"></div>
+      </div>
+    </section>
+
+    <section class="panel panel--blocks" data-panel="blocks">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title-row">
+            <h2 id="blocks-panel-title">Latency blocks</h2>
+            <button type="button" class="panel-help-btn" data-help="latency-blocks" aria-label="About Latency blocks" aria-haspopup="dialog" aria-expanded="false">
+              <span aria-hidden="true">i</span>
+            </button>
+          </div>
+          <p class="panel-subtitle" id="blocks-panel-subtitle">1-minute candles — green is good, amber is fair, red is poor (latency + jitter + loss)</p>
+        </div>
+      </div>
+      <div class="quality-timeline-wrap" id="quality-timeline-wrap">
+        <div class="quality-timeline" id="quality-timeline" role="img" aria-label="Connection quality by minute"></div>
+      </div>
+      <div class="chart-wrap chart-wrap--short blocks-chart-wrap">
+        <canvas id="latency-blocks-chart"></canvas>
+      </div>
+    </section>
+
+    <section class="panel panel--history-breakdown" data-panel="history-breakdown">
+      <div class="panel-head">
+        <div>
+          <h2>History breakdown</h2>
+          <p class="panel-subtitle">How the selected window splits across quality tiers</p>
+        </div>
+      </div>
+      <div class="history-breakdown-grid">
+        <figure class="history-pie">
+          <figcaption class="history-pie-head">
+            <h3>Latency</h3>
+            <p class="history-pie-caption mono" id="history-latency-pie-caption">—</p>
+          </figcaption>
+          <div class="chart-wrap chart-wrap--pie"><canvas id="history-latency-pie"></canvas></div>
+        </figure>
+        <figure class="history-pie">
+          <figcaption class="history-pie-head">
+            <h3>Jitter</h3>
+            <p class="history-pie-caption mono" id="history-jitter-pie-caption">—</p>
+          </figcaption>
+          <div class="chart-wrap chart-wrap--pie"><canvas id="history-jitter-pie"></canvas></div>
+        </figure>
+        <figure class="history-pie">
+          <figcaption class="history-pie-head">
+            <h3>Packet loss</h3>
+            <p class="history-pie-caption mono" id="history-loss-pie-caption">—</p>
+          </figcaption>
+          <div class="chart-wrap chart-wrap--pie"><canvas id="history-loss-pie"></canvas></div>
+        </figure>
+        <figure class="history-pie">
+          <figcaption class="history-pie-head">
+            <h3>Minute quality</h3>
+            <p class="history-pie-caption mono" id="history-quality-pie-caption">—</p>
+          </figcaption>
+          <div class="chart-wrap chart-wrap--pie"><canvas id="history-quality-pie"></canvas></div>
+        </figure>
+      </div>
+    </section>
+
+    <section class="panel panel--distribution" data-panel="distribution">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title-row">
+            <h2>Latency distribution</h2>
+          </div>
+          <p class="panel-subtitle" id="distribution-insight">How pings spread across quality tiers in this window</p>
+        </div>
+      </div>
+      <div class="chart-wrap chart-wrap--distribution">
+        <canvas id="distribution-chart"></canvas>
+      </div>
+    </section>
+
+    <section class="panel panel--latency" data-panel="latency">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title-row">
+            <h2>Latency</h2>
+            <button type="button" class="panel-help-btn" data-help="latency" aria-label="About Latency" aria-haspopup="dialog" aria-expanded="false">
+              <span aria-hidden="true">i</span>
+            </button>
+          </div>
+          <p class="panel-subtitle">Per-ping round trip time with ±jitter band — failed pings shown as red strips</p>
+        </div>
+      </div>
+      <div class="chart-wrap chart-wrap--latency">
+        <canvas id="latency-chart"></canvas>
+      </div>
+      <div class="chart-meta mono" aria-hidden="true">
+        <span class="chart-legend">
+          <span class="legend-item"><i class="legend-dot legend-dot--latency-line"></i>latency</span>
+          <span class="legend-item"><i class="legend-dot legend-dot--jitter-band"></i>± jitter</span>
+          <span class="legend-item"><i class="legend-dot legend-dot--fail"></i>failed ping</span>
+        </span>
+      </div>
+    </section>
+
+    <section class="panel panel--jitter" data-panel="jitter">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title-row">
+            <h2>Jitter</h2>
+            <button type="button" class="panel-help-btn" data-help="jitter-chart" aria-label="About Jitter" aria-haspopup="dialog" aria-expanded="false">
+              <span aria-hidden="true">i</span>
+            </button>
+          </div>
+          <p class="panel-subtitle">Timing variation between pings — lower is steadier</p>
+        </div>
+      </div>
+      <div class="chart-wrap chart-wrap--short">
+        <canvas id="jitter-chart"></canvas>
+      </div>
+    </section>
+
+    <section class="panel panel--loss" data-panel="loss">
+      <div class="panel-head">
+        <div>
+          <div class="panel-title-row">
+            <h2>Packet loss</h2>
+            <button type="button" class="panel-help-btn" data-help="loss-chart" aria-label="About Packet loss" aria-haspopup="dialog" aria-expanded="false">
+              <span aria-hidden="true">i</span>
+            </button>
+          </div>
+          <p class="panel-subtitle">Loss per minute — bar color shows severity</p>
+        </div>
+      </div>
+      <div class="chart-wrap chart-wrap--short">
+        <canvas id="loss-chart"></canvas>
+      </div>
+    </section>
+
+    <div class="tables-grid">
+      <section class="panel panel--window-insights" data-panel="window-insights">
+        <div class="panel-head">
+          <div>
+            <h2>Window insights</h2>
+            <p class="panel-subtitle">Key highlights from the selected window</p>
+          </div>
+        </div>
+        <div class="window-insights-strip" id="window-insights-strip">
+          <div class="stat">
+            <span class="stat-name">Peak latency</span>
+            <span class="stat-value mono" id="insight-peak-latency">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-name">Peak minute</span>
+            <span class="stat-value mono" id="insight-peak-minute">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-name">Best minute</span>
+            <span class="stat-value mono" id="insight-best-minute">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-name">Total downtime</span>
+            <span class="stat-value mono" id="insight-total-downtime">—</span>
+          </div>
+          <div class="stat">
+            <span class="stat-name">Outages</span>
+            <span class="stat-value mono" id="insight-outage-count">—</span>
+          </div>
+          <div class="stat stat--full">
+            <span class="stat-name">Health notes</span>
+            <span class="stat-value" id="insight-health-reasons">—</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="outages">
+        <div class="panel-head">
+          <div>
+            <h2>Outages</h2>
+            <p class="panel-subtitle">Red pulse = ongoing outage · duration &amp; failures colored by severity</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Start</th>
+                <th>End</th>
+                <th>Duration</th>
+                <th>Failed pings</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="outages-table">
+              <tr><td colspan="5" class="empty">No outages in this window</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="recent">
+        <div class="panel-head">
+          <div>
+            <h2>Recent samples</h2>
+            <p class="panel-subtitle">Green rows = OK, red = failed · latency &amp; jitter colored by quality</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Latency</th>
+                <th>Jitter</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody id="recent-table">
+              <tr><td colspan="4" class="empty">Waiting for data…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="worst-minutes">
+        <div class="panel-head">
+          <div>
+            <h2>Worst minutes</h2>
+            <p class="panel-subtitle">Highest-impact minutes in the selected window</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Avg latency</th>
+                <th>Jitter</th>
+                <th>Loss</th>
+                <th>Quality</th>
+              </tr>
+            </thead>
+            <tbody id="worst-minutes-table">
+              <tr><td colspan="5" class="empty">No data in this window</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="best-minutes">
+        <div class="panel-head">
+          <div>
+            <h2>Best minutes</h2>
+            <p class="panel-subtitle">Most stable minutes in the selected window</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Avg latency</th>
+                <th>Jitter</th>
+                <th>Loss</th>
+                <th>Quality</th>
+              </tr>
+            </thead>
+            <tbody id="best-minutes-table">
+              <tr><td colspan="5" class="empty">No data in this window</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" data-panel="minute-log">
+        <div class="panel-head">
+          <div>
+            <h2>Minute log</h2>
+            <p class="panel-subtitle">Every minute with samples in the selected window</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Avg</th>
+                <th>Low</th>
+                <th>High</th>
+                <th>Jitter</th>
+                <th>Loss</th>
+                <th>Quality</th>
+              </tr>
+            </thead>
+            <tbody id="minute-log-table">
+              <tr><td colspan="7" class="empty">No data in this window</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
