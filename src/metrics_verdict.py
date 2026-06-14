@@ -1,7 +1,8 @@
 import threading
 from datetime import datetime, timedelta, timezone
 
-from src.metrics_time import median, parse_ts, percentile
+from src.metrics_time import median, parse_ts
+from src.sample_utils import sample_quality
 
 
 _HEALTH_LABELS = {
@@ -80,13 +81,7 @@ def compute_now_stats(
     recent = [sample for sample in samples if parse_ts(sample["ts"]) >= cutoff]
 
     total = len(recent)
-    failed = sum(1 for sample in recent if not sample.get("success"))
-    latencies = [
-        sample["latency_ms"]
-        for sample in recent
-        if sample.get("success") and sample.get("latency_ms") is not None
-    ]
-    jitters = [sample["jitter_ms"] for sample in recent if sample.get("jitter_ms") is not None]
+    latencies, jitters, failed, _ = sample_quality(recent)
 
     tail_failures = 0
     for sample in reversed(recent):
@@ -224,19 +219,12 @@ def compute_baseline_and_spikes(
     spike_rate_per_min = round(len(spikes) / window_minutes, 2) if window_minutes else 0.0
     worst_spike = max(spikes, key=lambda spike: spike["latency_ms"]) if spikes else None
 
-    p95_vs_baseline = None
-    if baseline_ms and recent:
-        p95 = percentile([sample["latency_ms"] for sample in recent], 95)
-        p95_vs_baseline = round(p95 / baseline_ms, 2)
-
     return {
         "baseline_ms": baseline_ms,
         "spike_threshold_ms": spike_threshold_ms,
         "spike_count": len(spikes),
         "spike_rate_per_min": spike_rate_per_min,
         "worst_spike": worst_spike,
-        "spikes": spikes[-12:],
-        "p95_vs_baseline": p95_vs_baseline,
     }
 
 

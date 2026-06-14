@@ -6,18 +6,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from src.metrics_time import parse_ts
+from src.sample_utils import parse_jsonl_sample
 
 
 def _parse_log_line(line: str) -> tuple[datetime, str] | None:
-    stripped = line.strip()
-    if not stripped:
+    sample = parse_jsonl_sample(line)
+    if sample is None:
         return None
-    try:
-        sample = json.loads(stripped)
-        ts = parse_ts(sample["ts"])
-    except (json.JSONDecodeError, KeyError, ValueError):
-        return None
-    return ts, stripped
+    return parse_ts(sample["ts"]), line.strip()
 
 
 def _read_parsed_lines(log_file: Path) -> list[tuple[datetime, str]]:

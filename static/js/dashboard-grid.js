@@ -4,22 +4,6 @@ const DashboardGrid = (() => {
   const GRID_COLUMNS = 12;
   const SINGLE_COLUMN_BREAKPOINT = 832;
 
-  const GRID_PANEL_META = {
-    hero: { minW: 6, maxW: 12 },
-    status: { minW: 4, maxW: 12 },
-    indicators: { minW: 6, maxW: 12 },
-    live: { minW: 6, maxW: 12 },
-    narrative: { minW: 4, maxW: 12 },
-    stats: { minW: 6, maxW: 12 },
-    latency: { minW: 4, maxW: 12 },
-    distribution: { minW: 3, maxW: 8 },
-    jitter: { minW: 3, maxW: 12 },
-    loss: { minW: 3, maxW: 12 },
-    "quality-timeline": { minW: 6, maxW: 12 },
-    outages: { minW: 4, maxW: 12 },
-    recent: { minW: 4, maxW: 12 },
-  };
-
   const PANEL_ORDER = ViewsModel.PANEL_DEFS.map((p) => p.id);
 
   let gridEl = null;
@@ -37,7 +21,7 @@ const DashboardGrid = (() => {
   }
 
   function getMeta(panelId) {
-    return GRID_PANEL_META[panelId] ?? { minW: 3, maxW: 12 };
+    return ViewsModel.getPanelMeta(panelId);
   }
 
   function defaultOrder(panelId) {
@@ -98,9 +82,10 @@ const DashboardGrid = (() => {
       if (!el || el.classList.contains("is-panel-hidden")) continue;
       const spanMatch = [...el.classList].find((c) => /^span-\d+$/.test(c));
       const w = spanMatch ? Number(spanMatch.slice(5)) : 12;
+      const parsedOrder = Number(el.style.order);
       layout[panelId] = normalizeLayoutItem(panelId, {
         w,
-        order: Number(el.style.order) || defaultOrder(panelId),
+        order: Number.isFinite(parsedOrder) ? parsedOrder : defaultOrder(panelId),
       });
     }
     return layout;
@@ -295,9 +280,10 @@ const DashboardGrid = (() => {
   return {
     GRID_COLUMNS,
     SINGLE_COLUMN_BREAKPOINT,
-    GRID_PANEL_META,
     normalizeLayoutItem,
     normalizeLayoutMap,
+    readLayoutFromDom,
+    reorderPanel,
     applyLayout,
     applyCurrentView,
     setEditMode,

@@ -20,60 +20,150 @@ const ViewsModel = (() => {
   };
 
   const PANEL_DEFS = [
-    { id: "hero", label: "Connection status", group: "status", description: "Stabilized gaming verdict banner" },
-    { id: "status", label: "Current status", group: "status", description: "Plain-language narrative and reason chips" },
-    { id: "indicators", label: "Key indicators", group: "live", description: "Ping, jitter, loss, and spike rate tiles" },
-    { id: "live", label: "Live feed", group: "live", description: "Last raw ping and heartbeat strip" },
-    { id: "narrative", label: "What's happening", group: "live", description: "Plain-language connection readout" },
-    { id: "stats", label: "Selected window", group: "window", description: "Rolling-window stats with health chip" },
-    { id: "latency", label: "Latency chart", group: "charts", description: "Per-ping round trip time over the window" },
-    { id: "distribution", label: "Latency distribution", group: "charts", description: "Ping spread across quality tiers" },
-    { id: "jitter", label: "Jitter chart", group: "charts", description: "Timing variation between pings" },
-    { id: "loss", label: "Packet loss chart", group: "charts", description: "Failed pings per minute bucket" },
-    { id: "quality-timeline", label: "Quality timeline", group: "charts", description: "Minute-by-minute connection quality" },
-    { id: "outages", label: "Outages", group: "tables", description: "Failure stretches in the window" },
-    { id: "recent", label: "Recent samples", group: "tables", description: "Latest pings, newest first" },
+    {
+      id: "hero",
+      label: "Connection status",
+      group: "status",
+      description: "Stabilized gaming verdict banner",
+      layout: { w: 8, order: 0, minW: 6, maxW: 12 },
+      defaultVisible: true,
+    },
+    {
+      id: "status",
+      label: "Current status",
+      group: "status",
+      description: "Headline summary and live metric readouts",
+      layout: { w: 4, order: 1, minW: 4, maxW: 12 },
+      defaultVisible: true,
+    },
+    {
+      id: "indicators",
+      label: "Key indicators",
+      group: "live",
+      description: "Ping, jitter, loss, and spike rate tiles",
+      layout: { w: 12, order: 2, minW: 6, maxW: 12 },
+      defaultVisible: true,
+    },
+    {
+      id: "live",
+      label: "Live feed",
+      group: "live",
+      description: "Last raw ping and heartbeat strip",
+      layout: { w: 7, order: 3, minW: 6, maxW: 12 },
+      defaultVisible: true,
+    },
+    {
+      id: "narrative",
+      label: "What's happening",
+      group: "live",
+      description: "Plain-language connection readout",
+      layout: { w: 5, order: 4, minW: 4, maxW: 12 },
+      defaultVisible: true,
+    },
+    {
+      id: "stats",
+      label: "Selected window",
+      group: "window",
+      description: "Rolling-window stats with health chip",
+      layout: { w: 12, order: 5, minW: 6, maxW: 12 },
+      defaultVisible: true,
+    },
+    {
+      id: "latency",
+      label: "Latency chart",
+      group: "charts",
+      description: "Per-ping round trip time over the window",
+      layout: { w: 8, order: 6, minW: 4, maxW: 12 },
+      defaultVisible: true,
+    },
+    {
+      id: "distribution",
+      label: "Latency distribution",
+      group: "charts",
+      description: "Ping spread across quality tiers",
+      layout: { w: 4, order: 7, minW: 3, maxW: 8 },
+      defaultVisible: true,
+    },
+    {
+      id: "jitter",
+      label: "Jitter chart",
+      group: "charts",
+      description: "Timing variation between pings",
+      layout: { w: 6, order: 8, minW: 3, maxW: 12 },
+      defaultVisible: true,
+    },
+    {
+      id: "loss",
+      label: "Packet loss chart",
+      group: "charts",
+      description: "Failed pings per minute bucket",
+      layout: { w: 6, order: 9, minW: 3, maxW: 12 },
+      defaultVisible: true,
+    },
+    {
+      id: "quality-timeline",
+      label: "Quality timeline",
+      group: "charts",
+      description: "Minute-by-minute connection quality",
+      layout: { w: 12, order: 10, minW: 6, maxW: 12 },
+      defaultVisible: true,
+    },
+    {
+      id: "outages",
+      label: "Outages",
+      group: "tables",
+      description: "Failure stretches in the window",
+      layout: { w: 6, order: 11, minW: 4, maxW: 12 },
+      defaultVisible: true,
+    },
+    {
+      id: "recent",
+      label: "Recent samples",
+      group: "tables",
+      description: "Latest pings, newest first",
+      layout: { w: 6, order: 12, minW: 4, maxW: 12 },
+      defaultVisible: true,
+    },
   ];
+
+  function buildDefaultVisibility() {
+    const visibility = {};
+    for (const panel of PANEL_DEFS) {
+      visibility[panel.id] = panel.defaultVisible;
+    }
+    return visibility;
+  }
+
+  function buildDefaultLayout() {
+    const layout = {};
+    for (const panel of PANEL_DEFS) {
+      layout[panel.id] = { w: panel.layout.w, order: panel.layout.order };
+    }
+    return layout;
+  }
 
   const VIEW_LABELS = {
     default: "Default",
   };
 
   const VIEW_DEFAULTS = {
-    default: {
-      hero: true,
-      status: true,
-      indicators: true,
-      live: true,
-      narrative: true,
-      stats: true,
-      latency: true,
-      distribution: true,
-      jitter: true,
-      loss: true,
-      "quality-timeline": true,
-      outages: true,
-      recent: true,
-    },
+    default: buildDefaultVisibility(),
   };
 
   const LAYOUT_DEFAULTS = {
-    default: {
-      hero: { w: 8, order: 0 },
-      status: { w: 4, order: 1 },
-      indicators: { w: 12, order: 2 },
-      live: { w: 7, order: 3 },
-      narrative: { w: 5, order: 4 },
-      stats: { w: 12, order: 5 },
-      latency: { w: 8, order: 6 },
-      distribution: { w: 4, order: 7 },
-      jitter: { w: 6, order: 8 },
-      loss: { w: 6, order: 9 },
-      "quality-timeline": { w: 12, order: 10 },
-      outages: { w: 6, order: 11 },
-      recent: { w: 6, order: 12 },
-    },
+    default: buildDefaultLayout(),
   };
+
+  function getPanelMeta(panelId) {
+    const panel = PANEL_DEFS.find((p) => p.id === panelId);
+    if (!panel) return { minW: 3, maxW: 12, w: 12, order: 0 };
+    return {
+      minW: panel.layout.minW,
+      maxW: panel.layout.maxW,
+      w: panel.layout.w,
+      order: panel.layout.order,
+    };
+  }
 
   let customViews = {};
   let panelPrefs = {};
@@ -377,6 +467,7 @@ const ViewsModel = (() => {
     getEffectivePanelVisibility,
     getEffectivePanelLayout,
     getLayoutDefaultsForView,
+    getPanelMeta,
     setCurrentView,
     setPanelVisibility,
     setPanelLayout,

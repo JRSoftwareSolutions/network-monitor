@@ -1,4 +1,3 @@
-import json
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -10,6 +9,7 @@ from src.metrics_time import (
     percentile,
     sort_samples_by_ts,
 )
+from src.sample_utils import ceil_div, parse_jsonl_sample, sample_quality
 
 
 WINDOW_OPTIONS = [5, 15, 30, 60, 120]
@@ -29,15 +29,10 @@ def read_samples(log_file: Path, window_minutes: int) -> list[dict]:
 
     with log_file.open("r", encoding="utf-8") as handle:
         for line in handle:
-            stripped = line.strip()
-            if not stripped:
+            sample = parse_jsonl_sample(line)
+            if sample is None:
                 continue
-            try:
-                sample = json.loads(stripped)
-                ts = parse_ts(sample["ts"])
-            except (json.JSONDecodeError, KeyError, ValueError):
-                continue
-            if ts >= cutoff:
+            if parse_ts(sample["ts"]) >= cutoff:
                 samples.append(sample)
 
     return sort_samples_by_ts(samples)
@@ -70,7 +65,7 @@ def downsample_samples(
         last_ts = parse_ts(samples[-1]["ts"])
         span_seconds = max(1, int((last_ts - first_ts).total_seconds()) + 1)
 
-    bucket_seconds = max(1, -(-span_seconds // max_points))
+    bucket_seconds = max(1, ceil_div(span_seconds, max_points))
 
     grouped: dict[datetime, list[dict]] = {}
     for sample in samples:
@@ -78,7 +73,7 @@ def downsample_samples(
         grouped.setdefault(bucket_start, []).append(sample)
 
     if window_minutes is not None:
-        num_buckets = max(1, -(-span_seconds // bucket_seconds))
+        num_buckets = ceil_div(span_seconds, bucket_seconds)
         current_bucket = floor_to_bucket(end, bucket_seconds)
         bucket_starts = [
             current_bucket - timedelta(seconds=bucket_seconds * offset)
@@ -144,18 +139,7 @@ def downsample_samples(
 
 
 def _summarize_bucket(bucket_samples_list: list[dict]) -> dict:
-    latencies = [
-        sample["latency_ms"]
-        for sample in bucket_samples_list
-        if sample.get("success") and sample.get("latency_ms") is not None
-    ]
-    jitters = [
-        sample["jitter_ms"]
-        for sample in bucket_samples_list
-        if sample.get("jitter_ms") is not None
-    ]
-    total = len(bucket_samples_list)
-    failed = sum(1 for sample in bucket_samples_list if not sample.get("success"))
+    latencies, jitters, failed, total = sample_quality(bucket_samples_list)
 
     bucket: dict = {
         "sample_count": total,
@@ -239,14 +223,7 @@ def compute_stats(samples: list[dict]) -> dict:
             "sample_count": 0,
         }
 
-    total = len(samples)
-    failed = sum(1 for sample in samples if not sample.get("success"))
-    latencies = [
-        sample["latency_ms"]
-        for sample in samples
-        if sample.get("success") and sample.get("latency_ms") is not None
-    ]
-    jitters = [sample["jitter_ms"] for sample in samples if sample.get("jitter_ms") is not None]
+    latencies, jitters, failed, total = sample_quality(samples)
     loss_pct = round((failed / total) * 100, 2) if total else 0.0
 
     return {

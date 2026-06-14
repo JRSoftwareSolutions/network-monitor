@@ -22,7 +22,3 @@ class JitterTracker:
 
         self._previous_rtt = rtt_ms
         return round(self._jitter, 2)
-
-    @property
-    def value(self) -> float | None:
-        return self._jitter

@@ -1,3 +1,4 @@
+import re
 import logging
 import shutil
 import sys
@@ -40,6 +41,10 @@ DEFAULT_MAX_LOG_AGE_MINUTES = 180
 DEFAULT_ARCHIVE_DIR = "logs/archive"
 DEFAULT_MAX_LOG_SIZE_MB = 1.0
 
+# Hostname or IPv4/IPv6 address; must not start with "-" so the value can
+# never be mistaken for a ping flag by the subprocess fallback.
+TARGET_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:\-]{0,252}$")
+
 _logger = logging.getLogger(__name__)
 
 
@@ -71,6 +76,8 @@ def normalize_target(value: str) -> str:
     target = str(value).strip()
     if not target:
         raise ValueError("target must not be empty")
+    if not TARGET_RE.match(target):
+        raise ValueError("target must be a hostname or IP address")
     return target
 
 

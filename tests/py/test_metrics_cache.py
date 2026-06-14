@@ -1,4 +1,4 @@
-from src.server import MetricsCache
+from src.metrics_cache import MetricsCache
 
 
 def test_metrics_cache_live_reuses_until_new_sample():

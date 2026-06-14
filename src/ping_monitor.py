@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from src.metrics import JitterTracker, MetricsLogger, SampleStore, read_samples
+from src.metrics_time import format_ts
 from src.win_proc import CREATE_NO_WINDOW, ping_startupinfo
 
 # Locale-neutral: matches time=14ms, tijd=14 ms, temps=14,5ms, etc.
@@ -186,6 +187,13 @@ class PingMonitor:
             self._thread.join(timeout=self.interval_seconds + self.ping_timeout_ms / 1000 + 2)
         self._logger.flush()
         self._logger.close()
+        if sys.platform == "win32":
+            try:
+                from src import win_ping
+
+                win_ping.close()
+            except OSError:
+                pass
 
     def _run_loop(self) -> None:
         while not self._stop_event.is_set():
@@ -196,7 +204,7 @@ class PingMonitor:
                 self._jitter.reset()
 
             sample = {
-                "ts": datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
+                "ts": format_ts(datetime.now(timezone.utc)),
                 "host": self.target,
                 "success": success,
                 "latency_ms": latency_ms,

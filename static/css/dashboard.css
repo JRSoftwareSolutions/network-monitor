@@ -921,7 +921,6 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .form-error { color: var(--bad); font-size: 0.78rem; min-height: 1em; }
 
 /* ---------- misc ---------- */
-.section-title { font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.12em; color: var(--ink-3); margin: 8px 2px 2px; grid-column: span 12; }
 [hidden] { display: none !important; }
 
 /* ---------- layout edit bar & panels popover ---------- */

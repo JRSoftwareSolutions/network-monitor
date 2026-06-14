@@ -116,3 +116,12 @@ def run_win_ping(ip_addr: int, timeout_ms: int = 1000) -> tuple[bool, float | No
         if _instance is None:
             _instance = WinPing()
         return _instance.ping(ip_addr, timeout_ms)
+
+
+def close() -> None:
+    """Release the shared WinPing handle (e.g. when the monitor stops)."""
+    global _instance
+    with _instance_lock:
+        if _instance is not None:
+            _instance.close()
+            _instance = None

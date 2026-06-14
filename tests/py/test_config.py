@@ -48,6 +48,8 @@ def test_normalize_target():
     assert normalize_target("  1.1.1.1  ") == "1.1.1.1"
     with pytest.raises(ValueError, match="empty"):
         normalize_target("   ")
+    with pytest.raises(ValueError, match="hostname or IP"):
+        normalize_target("-invalid")
 
 
 def test_load_config_missing_file(tmp_path):
