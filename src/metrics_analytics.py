@@ -10,7 +10,7 @@ from src.metrics_time import (
     sort_samples_by_ts,
 )
 from src.metrics_verdict import rate_bucket_quality
-from src.sample_utils import ceil_div, parse_jsonl_sample, sample_quality
+from src.sample_utils import ceil_div, compute_loss_pct, parse_jsonl_sample, sample_quality
 
 
 WINDOW_OPTIONS = [5, 15, 30, 60, 120]
@@ -178,7 +178,7 @@ def _summarize_bucket(bucket_samples_list: list[dict]) -> dict:
     bucket: dict = {
         "sample_count": total,
         "failed_count": failed,
-        "loss_pct": round((failed / total) * 100, 2) if total else 0.0,
+        "loss_pct": compute_loss_pct(failed, total),
         "open_ms": None,
         "high_ms": None,
         "low_ms": None,
@@ -257,7 +257,7 @@ def compute_stats(samples: list[dict]) -> dict:
         }
 
     latencies, jitters, failed, total = sample_quality(samples)
-    loss_pct = round((failed / total) * 100, 2) if total else 0.0
+    loss_pct = compute_loss_pct(failed, total)
 
     return {
         "packet_loss_pct": loss_pct,
@@ -295,7 +295,7 @@ def detect_outages(samples: list[dict], *, now: datetime | None = None) -> list[
             outage_count = 0
 
     if outage_start is not None:
-        end_ts = now_dt.isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        end_ts = format_ts(now_dt)
         outages.append(
             _build_outage(outage_start, end_ts, outage_count, ongoing=True, now=now_dt)
         )

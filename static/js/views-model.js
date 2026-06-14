@@ -9,6 +9,7 @@ const ViewsModel = (() => {
     panelPrefs: "networkMonitor.panelPrefs",
     customViews: "networkMonitor.customViews",
     panelLayoutPrefs: "networkMonitor.panelLayoutPrefs",
+    windowMinutes: "networkMonitor.windowMinutes",
   };
 
   const PANEL_GROUPS = {
@@ -328,6 +329,11 @@ const ViewsModel = (() => {
     savePanelPrefs();
   }
 
+  function layoutMatchesDefaults(viewId, panelId, item) {
+    const defaults = getLayoutDefaultsForView(viewId);
+    return ["w", "order"].every((key) => item[key] === defaults[panelId]?.[key]);
+  }
+
   function setPanelLayout(viewId, panelId, item) {
     if (isCustomView(viewId)) {
       if (!customViews[viewId].layout) customViews[viewId].layout = {};
@@ -338,9 +344,7 @@ const ViewsModel = (() => {
     const defaults = getLayoutDefaultsForView(viewId);
     const overrides = { ...getPanelLayoutOverrides(viewId) };
     const merged = { ...defaults[panelId], ...item };
-    const isDefault = ["w", "order"].every(
-      (key) => merged[key] === defaults[panelId]?.[key],
-    );
+    const isDefault = layoutMatchesDefaults(viewId, panelId, merged);
     if (isDefault) {
       delete overrides[panelId];
     } else {
@@ -365,9 +369,7 @@ const ViewsModel = (() => {
     for (const { id } of PANEL_DEFS) {
       const item = layoutMap[id];
       if (!item) continue;
-      const isDefault = ["w", "order"].every(
-        (key) => item[key] === defaults[id]?.[key],
-      );
+      const isDefault = layoutMatchesDefaults(viewId, id, item);
       if (!isDefault) overrides[id] = { ...item };
     }
     if (Object.keys(overrides).length) {

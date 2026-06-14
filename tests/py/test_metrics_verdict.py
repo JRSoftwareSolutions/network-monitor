@@ -39,6 +39,11 @@ def test_compute_health_offline_on_high_loss():
     assert result["level"] == "offline"
 
 
+def test_compute_health_offline_at_exact_threshold():
+    result = compute_health({"sample_count": 10, "packet_loss_pct": 50.0})
+    assert result["level"] == "offline"
+
+
 def test_compute_now_stats_counts_failures():
     now = datetime(2026, 6, 14, 12, 0, 0, tzinfo=timezone.utc)
     samples = [

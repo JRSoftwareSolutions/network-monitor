@@ -2,7 +2,7 @@
 
 const DashboardGrid = (() => {
   const GRID_COLUMNS = 12;
-  const SINGLE_COLUMN_BREAKPOINT = 832;
+  const SINGLE_COLUMN_BREAKPOINT = 1100;
 
   const PANEL_ORDER = ViewsModel.PANEL_DEFS.map((p) => p.id);
 
@@ -75,13 +75,17 @@ const DashboardGrid = (() => {
     el.style.order = String(item.order);
   }
 
+  function readPanelWidth(el) {
+    const spanMatch = [...el.classList].find((c) => /^span-\d+$/.test(c));
+    return spanMatch ? Number(spanMatch.slice(5)) : 12;
+  }
+
   function readLayoutFromDom() {
     const layout = {};
     for (const panelId of ViewsModel.panelIds()) {
       const el = panelElement(panelId);
       if (!el || el.classList.contains("is-panel-hidden")) continue;
-      const spanMatch = [...el.classList].find((c) => /^span-\d+$/.test(c));
-      const w = spanMatch ? Number(spanMatch.slice(5)) : 12;
+      const w = readPanelWidth(el);
       const parsedOrder = Number(el.style.order);
       layout[panelId] = normalizeLayoutItem(panelId, {
         w,
@@ -141,8 +145,7 @@ const DashboardGrid = (() => {
     if (!selectedPanelId) return;
     const el = panelElement(selectedPanelId);
     if (!el) return;
-    const spanMatch = [...el.classList].find((c) => /^span-\d+$/.test(c));
-    const w = spanMatch ? Number(spanMatch.slice(5)) : 12;
+    const w = readPanelWidth(el);
     for (const btn of document.querySelectorAll("[data-width]")) {
       btn.classList.toggle("is-active", Number(btn.dataset.width) === w);
     }

@@ -3,6 +3,7 @@
 const ViewBuilder = (() => {
   const VM = ViewsModel;
   const DG = DashboardGrid;
+  const $ = window.DashboardFormat.$;
   const NEW_VIEW_VALUE = "__new_view__";
 
   let viewSelect = null;
@@ -11,10 +12,6 @@ const ViewBuilder = (() => {
   let onLayoutApplied = null;
 
   const els = {};
-
-  function $(id) {
-    return document.getElementById(id);
-  }
 
   function syncDraftVisibility() {
     draftVisibility = { ...VM.getEffectivePanelVisibility(VM.currentView) };
@@ -309,7 +306,8 @@ const ViewBuilder = (() => {
     els.newViewBackdrop?.addEventListener("click", closeNewViewModal);
 
     $("settings-open-layout")?.addEventListener("click", () => {
-      $("settings-modal")?.setAttribute("hidden", "");
+      const settingsModal = $("settings-modal");
+      if (settingsModal) settingsModal.hidden = true;
       enterEditMode();
     });
 
@@ -376,11 +374,7 @@ const ViewBuilder = (() => {
 
   return {
     init,
-    applyView,
-    enterEditMode,
-    exitEditMode,
     getCurrentView: () => VM.currentView,
-    updateSettingsLayoutSummary: updateSettingsSummary,
   };
 })();
 

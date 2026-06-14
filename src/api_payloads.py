@@ -4,6 +4,7 @@ from src.indicator_series import compute_indicator_series
 from src.metrics import (
     BLOCKS_BUCKET_SECONDS,
     NOW_WINDOW_SECONDS,
+    RECENT_SAMPLES_SECONDS,
     TREND_PRIOR_SECONDS,
     TREND_RECENT_SECONDS,
     VerdictStabilizer,
@@ -83,15 +84,27 @@ def _indicator_series_for_samples(recent_samples: list[dict], now_payload: dict)
     )
 
 
+def _now_and_series(
+    monitor: PingMonitor,
+    stabilizer: VerdictStabilizer,
+    trend_samples: list[dict],
+) -> tuple[dict, list[dict], dict]:
+    now_payload = build_now_payload(trend_samples, stabilizer)
+    recent_samples = monitor.get_recent_samples(RECENT_SAMPLES_SECONDS)
+    indicator_series = _indicator_series_for_samples(recent_samples, now_payload)
+    return now_payload, recent_samples, indicator_series
+
+
 def build_live_payload(monitor: PingMonitor, stabilizer: VerdictStabilizer) -> dict:
     trend_samples = monitor.get_samples(trend_window_minutes())
     latest = monitor.get_latest_sample()
-    now_payload = build_now_payload(trend_samples, stabilizer)
-    recent_samples = monitor.get_recent_samples(60)
+    now_payload, recent_samples, indicator_series = _now_and_series(
+        monitor, stabilizer, trend_samples
+    )
     return {
         "latest_ts": latest["ts"] if latest else None,
         "recent_samples": recent_samples,
-        "indicator_series": _indicator_series_for_samples(recent_samples, now_payload),
+        "indicator_series": indicator_series,
         "now": now_payload,
     }
 
@@ -111,15 +124,16 @@ def build_metrics_payload(
 
     stats = compute_stats(samples)
     chart_samples = downsample_samples(samples, window_minutes=window)
-    recent_samples = monitor.get_recent_samples(60)
-    now_payload = build_now_payload(trend_samples, stabilizer)
+    now_payload, recent_samples, indicator_series = _now_and_series(
+        monitor, stabilizer, trend_samples
+    )
 
     return {
         "window_minutes": window,
         "latest_ts": samples[-1]["ts"] if samples else None,
         "samples": chart_samples,
         "recent_samples": recent_samples,
-        "indicator_series": _indicator_series_for_samples(recent_samples, now_payload),
+        "indicator_series": indicator_series,
         "sample_count_raw": len(samples),
         "stats": stats,
         "health": compute_health(stats),

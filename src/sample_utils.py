@@ -20,11 +20,14 @@ def filter_samples_since(samples: list[dict], cutoff: datetime) -> list[dict]:
     return [sample for sample in samples if parse_ts(sample["ts"]) >= cutoff]
 
 
+def compute_loss_pct(failed: int, total: int) -> float:
+    return round((failed / total) * 100, 2) if total else 0.0
+
+
 def window_avg_latency_and_loss(samples: list[dict]) -> tuple[float | None, float]:
     latencies, _, failed, total = sample_quality(samples)
     avg = sum(latencies) / len(latencies) if latencies else None
-    loss = (failed / total) * 100 if total else 0.0
-    return avg, loss
+    return avg, compute_loss_pct(failed, total)
 
 
 def sample_quality(samples: list[dict]) -> tuple[list[float], list[float], int, int]:

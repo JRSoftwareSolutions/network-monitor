@@ -20,3 +20,14 @@ def test_compute_indicator_series_aligns_with_samples():
     series = compute_indicator_series(samples, spike_threshold_ms=100.0)
     assert len(series["ping"]) == 5
     assert series["ping"][-1] is not None
+
+
+def test_spike_threshold_includes_exact_boundary():
+    now = datetime(2026, 6, 14, 12, 0, 0, tzinfo=timezone.utc)
+    samples = [
+        sample(now, -10, latency_ms=50),
+        sample(now, -5, latency_ms=100),
+        sample(now, 0, latency_ms=90),
+    ]
+    series = compute_indicator_series(samples, spike_threshold_ms=100.0)
+    assert series["spikes"][-1] == 6.0

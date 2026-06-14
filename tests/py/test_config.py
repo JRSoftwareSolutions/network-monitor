@@ -73,6 +73,22 @@ def test_load_config_none_yaml(tmp_path):
     assert config.ping_interval_seconds == MIN_PING_INTERVAL_SECONDS
 
 
+def test_load_config_invalid_integer_fields_log_warning(tmp_path, caplog):
+    path = tmp_path / "config.yaml"
+    path.write_text(
+        "target: 1.1.1.1\n"
+        "server_port: not-a-number\n"
+        "default_window_minutes: bad\n",
+        encoding="utf-8",
+    )
+    with caplog.at_level("WARNING"):
+        config = load_config(path)
+    assert config.server_port == 8080
+    assert config.default_window_minutes == 30
+    assert any("server_port must be an integer" in record.message for record in caplog.records)
+    assert any("default_window_minutes must be an integer" in record.message for record in caplog.records)
+
+
 def test_load_config_out_of_range_port_and_window(tmp_path):
     path = tmp_path / "config.yaml"
     path.write_text(
@@ -87,5 +103,5 @@ def test_load_config_out_of_range_port_and_window(tmp_path):
     )
     config = load_config(path)
     assert config.target == "8.8.8.8"
-    assert config.server_port == 8080
+    assert config.server_port == 65535
     assert config.default_window_minutes == MAX_DEFAULT_WINDOW_MINUTES

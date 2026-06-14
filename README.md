@@ -58,6 +58,8 @@ Edit [`config.yaml`](config.yaml):
 | `archive_enabled` | Write removed entries to timestamped archive files | `true` |
 | `max_log_size_mb` | Max live log file size before oldest entries are archived | `1` |
 | `archive_dir` | Directory for archived JSONL files | `logs/archive` |
+| `full_refresh_seconds` | Minimum seconds between full `/api/metrics` reloads | `60` |
+| `connection_refresh_seconds` | How often the dashboard refreshes connection info | `120` |
 
 Rolling window options in the dashboard are limited to values ≤ `max_log_age_minutes` (5, 15, 30, 60, 120 minutes by default).
 
@@ -181,8 +183,15 @@ Scripts load in dependency order from `index.html`:
 | `static/css/dashboard.css` | Hand-authored dashboard styles (no build step) |
 | `static/js/views-model.js` | View presets, panel visibility, layout persistence |
 | `static/js/dashboard-grid.js` | Native CSS grid layout (width, order, edit mode) |
-| `static/js/view-builder.js` | View selector, layout editor UI |
-| `static/js/dashboard.js` | Charts, polling, metrics rendering |
+| `static/js/dashboard-format.js` | Formatting helpers and DOM text utilities |
+| `static/js/view-builder.js` | View selector and layout editor UI |
+| `static/js/dashboard-rating.js` | Threshold tiers, colors, and bucket quality |
+| `static/js/dashboard-sparkline.js` | Canvas sparklines for indicator tiles |
+| `static/js/dashboard-render.js` | Panel DOM updates (hero, tables, heartbeat) |
+| `static/js/dashboard-charts.js` | Chart.js init and update |
+| `static/js/dashboard.js` | Polling orchestration, config, and settings |
+
+Panel IDs must stay in sync across `index.html` (`data-panel`), `views-model.js` (`PANEL_DEFS`), and panel height rules in `dashboard.css`.
 
 ## CSS
 

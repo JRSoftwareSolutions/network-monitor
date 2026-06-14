@@ -16,7 +16,6 @@ else:
     APP_ROOT = Path(__file__).resolve().parent.parent
     BUNDLE_ROOT = APP_ROOT
 
-PROJECT_ROOT = APP_ROOT
 DEFAULT_CONFIG_PATH = APP_ROOT / "config.yaml"
 
 MIN_PING_INTERVAL_SECONDS = 0.1
@@ -176,21 +175,27 @@ def _parse_config_fields(raw: dict, errors: list[str]) -> Config:
 
     server_host = str(raw.get("server_host", DEFAULT_SERVER_HOST))
 
-    server_port = _coerce_int(
-        raw.get("server_port"),
-        DEFAULT_SERVER_PORT,
-        key="server_port",
-        errors=errors,
-    )
-    if not MIN_SERVER_PORT <= server_port <= MAX_SERVER_PORT:
-        _logger.warning(
-            "Config: server_port %s out of range %s-%s; using default %s",
-            server_port,
-            MIN_SERVER_PORT,
-            MAX_SERVER_PORT,
+    server_port = clamp_server_port(
+        _coerce_int(
+            raw.get("server_port"),
             DEFAULT_SERVER_PORT,
+            key="server_port",
+            errors=errors,
         )
-        server_port = DEFAULT_SERVER_PORT
+    )
+    if raw.get("server_port") is not None:
+        try:
+            requested = int(raw["server_port"])
+        except (TypeError, ValueError):
+            requested = None
+        if requested is not None and requested != server_port:
+            _logger.warning(
+                "Config: server_port %s out of range %s-%s; using %s",
+                requested,
+                MIN_SERVER_PORT,
+                MAX_SERVER_PORT,
+                server_port,
+            )
 
     default_window_minutes = _coerce_int(
         raw.get("default_window_minutes"),
@@ -200,8 +205,11 @@ def _parse_config_fields(raw: dict, errors: list[str]) -> Config:
     )
     default_window_minutes = clamp_default_window_minutes(default_window_minutes)
     if raw.get("default_window_minutes") is not None:
-        requested = int(raw["default_window_minutes"])
-        if requested != default_window_minutes:
+        try:
+            requested = int(raw["default_window_minutes"])
+        except (TypeError, ValueError):
+            requested = None
+        if requested is not None and requested != default_window_minutes:
             _logger.warning(
                 "Config: default_window_minutes %s out of range %s-%s; using %s",
                 requested,
@@ -237,9 +245,10 @@ def _parse_config_fields(raw: dict, errors: list[str]) -> Config:
 def load_config(path: Path | None = None) -> Config:
     config_path = path or DEFAULT_CONFIG_PATH
     raw, errors = _read_yaml_raw(config_path)
+    config = _parse_config_fields(raw, errors)
     for message in errors:
         _logger.warning("Config: %s", message)
-    return _parse_config_fields(raw, errors)
+    return config
 
 
 def _yaml_number(value: float) -> int | float:
@@ -251,7 +260,7 @@ def _yaml_number(value: float) -> int | float:
 def _yaml_path(path: Path) -> str:
     """Keep paths inside the project relative, as they were authored."""
     try:
-        return path.relative_to(PROJECT_ROOT).as_posix()
+        return path.relative_to(APP_ROOT).as_posix()
     except ValueError:
         return str(path)
 

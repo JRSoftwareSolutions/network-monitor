@@ -151,9 +151,7 @@ def api_metrics_live(knownTs: str | None = Query(default=None)):
     unchanged = maybe_unchanged(latest_ts, knownTs)
     if unchanged is not None:
         return unchanged
-    return metrics_cache.get(
-        "live",
-        0,
+    return metrics_cache.get_live(
         latest_ts,
         lambda: build_live_payload(monitor, stabilizer),
     )
@@ -164,18 +162,13 @@ def api_metrics(
     windowMinutes: int = Query(default=config.default_window_minutes),
     knownTs: str | None = Query(default=None),
 ):
-    window = clamp_window_minutes(windowMinutes)
+    window = min(clamp_window_minutes(windowMinutes), config.max_log_age_minutes)
     latest = monitor.get_latest_sample()
     latest_ts = latest["ts"] if latest else None
     unchanged = maybe_unchanged(latest_ts, knownTs)
     if unchanged is not None:
         return unchanged
-    return metrics_cache.get(
-        "full",
-        window,
-        latest_ts,
-        lambda: build_metrics_payload(monitor, stabilizer, window),
-    )
+    return build_metrics_payload(monitor, stabilizer, window)
 
 
 def create_server(host: str, port: int) -> uvicorn.Server:

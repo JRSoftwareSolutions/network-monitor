@@ -1,14 +1,8 @@
 from datetime import datetime, timedelta
 
 from src.metrics_time import median, parse_ts
-from src.sample_utils import filter_samples_since
-
-INDICATOR_WINDOWS_SECONDS = {
-    "ping": 60,
-    "jitter": 120,
-    "loss": 120,
-    "spikes": 120,
-}
+from src.metrics_windows import INDICATOR_WINDOWS_SECONDS
+from src.sample_utils import compute_loss_pct, filter_samples_since
 
 
 def _rollup_median(values: list[float]) -> float | None:
@@ -62,11 +56,12 @@ def compute_indicator_series(
     loss = _rolling_series(
         samples,
         INDICATOR_WINDOWS_SECONDS["loss"],
-        lambda window, _end: (
-            round((sum(1 for s in window if not s.get("success")) / len(window)) * 100, 2)
-            if window
-            else None
-        ),
+        lambda window, _end: compute_loss_pct(
+            sum(1 for s in window if not s.get("success")),
+            len(window),
+        )
+        if window
+        else None,
     )
 
     if spike_threshold_ms is None:
@@ -97,6 +92,6 @@ def _spike_rate_per_min(
         for sample in window
         if sample.get("success")
         and sample.get("latency_ms") is not None
-        and sample["latency_ms"] > spike_threshold_ms
+        and sample["latency_ms"] >= spike_threshold_ms
     )
     return round(spike_count / duration_min, 2)

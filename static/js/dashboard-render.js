@@ -5,7 +5,7 @@ window.DashboardRender = (() => {
   const R = window.DashboardRating;
   const Sparkline = window.DashboardSparkline;
   const { dash, fmt, fmtMs, fmtPct, timeOfDay, hhmm, duration, escapeHtml, $, setText } = F;
-  const { COLORS, SCALE, ratePing, applyAccent, bucketQuality } = R;
+  const { COLORS, SCALE, ratePing, rateJitter, applyAccent, bucketQuality, INDICATOR_KEYS } = R;
 
   let appState = null;
 
@@ -95,7 +95,7 @@ window.DashboardRender = (() => {
     if (!appState) return;
     appState.sparklineNow = now || {};
     const series = indicatorSeries || {};
-    for (const key of ["ping", "jitter", "loss", "spikes"]) {
+    for (const key of INDICATOR_KEYS) {
       const card = $(`ind-${key}`);
       if (!card) continue;
       const canvas = card.querySelector('[data-role="sparkline"]');
@@ -118,7 +118,7 @@ window.DashboardRender = (() => {
       loss: (v) => fmt(v, v < 10 ? 1 : 0),
       spikes: (v) => fmtMs(v, 1),
     };
-    for (const key of ["ping", "jitter", "loss", "spikes"]) {
+    for (const key of INDICATOR_KEYS) {
       const card = $(`ind-${key}`);
       if (!card) continue;
       const data = ind[key];
@@ -345,6 +345,5 @@ window.DashboardRender = (() => {
     renderOutages,
     renderRecent,
     updateIndicatorSparklines,
-    bucketQuality,
   };
 })();

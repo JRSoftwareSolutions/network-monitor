@@ -80,7 +80,7 @@
     <!-- span-* classes are defaults; dashboard-grid.js overwrites width/order on init -->
     <div id="dashboard-grid" class="grid">
 
-      <div class="dashboard-panel span-8" data-panel="hero">
+      <div class="dashboard-panel panel--banner span-8" data-panel="hero">
         <section class="card hero">
             <div class="hero-main">
               <span class="hero-kicker"><span class="kdot" aria-hidden="true"></span><span id="verdict-kicker">connection status</span></span>
@@ -113,7 +113,7 @@
           </section>
       </div>
 
-      <div class="dashboard-panel span-4" data-panel="status">
+      <div class="dashboard-panel panel--banner span-4" data-panel="status">
         <section class="card">
             <div class="card-head">
               <div>
@@ -130,7 +130,7 @@
           </section>
       </div>
 
-      <div class="dashboard-panel span-12" data-panel="indicators">
+      <div class="dashboard-panel panel--indicators span-12" data-panel="indicators">
           <div class="indicators">
             <article class="indicator" id="ind-ping" data-rating="none">
               <div class="ind-head"><h3>Ping</h3><span class="ind-badge" data-role="badge">-</span></div>
@@ -167,7 +167,7 @@
           </div>
       </div>
 
-      <div class="dashboard-panel span-7" data-panel="live">
+      <div class="dashboard-panel panel--side span-7" data-panel="live">
         <section class="card">
             <div class="card-head">
               <div>
@@ -178,34 +178,28 @@
             <div class="live-grid">
               <div class="live-ping">
                 <span class="live-label">last ping</span>
-                <p style="margin:4px 0 0"><span class="num mono" id="live-ping" data-rating="none">-</span> <span class="unit">ms</span></p>
+                <p class="live-ping-value"><span class="num mono" id="live-ping" data-rating="none">-</span> <span class="unit">ms</span></p>
                 <p class="sub mono" id="live-ping-time">-</p>
               </div>
               <div>
                 <div class="heartbeat" id="heartbeat" aria-hidden="true"></div>
                 <div class="hb-meta">
                   <span>last 60 pings</span>
-                  <span class="legend">
-                    <span><i class="lg-great"></i>&lt;40</span>
-                    <span><i class="lg-good"></i>&lt;70</span>
-                    <span><i class="lg-okay"></i>&lt;110</span>
-                    <span><i class="lg-bad"></i>≥110</span>
-                    <span><i class="lg-fail"></i>fail</span>
-                  </span>
+                  <span class="legend" id="hb-legend"></span>
                 </div>
               </div>
             </div>
           </section>
       </div>
 
-      <div class="dashboard-panel span-5" data-panel="narrative">
+      <div class="dashboard-panel panel--side span-5" data-panel="narrative">
         <section class="card">
             <div class="card-head"><div><h2>What's happening</h2><p>Plain-language read on the connection</p></div></div>
             <div class="narrative" id="narrative"><p>Waiting for the first pings to come in...</p></div>
           </section>
       </div>
 
-      <div class="dashboard-panel span-12" data-panel="stats">
+      <div class="dashboard-panel panel--stats span-12" data-panel="stats">
         <section class="card">
             <div class="card-head">
               <div><h2>Selected window</h2><p>Stability over the last <span id="window-label">-</span> minutes</p></div>
@@ -224,35 +218,35 @@
           </section>
       </div>
 
-      <div class="dashboard-panel span-8" data-panel="latency">
+      <div class="dashboard-panel panel--chart span-8" data-panel="latency">
         <section class="card">
             <div class="card-head"><div><h2>Latency over time</h2><p>Per-ping round trip time - failed pings appear as gaps</p></div></div>
             <div class="chart-wrap tall"><canvas id="latency-chart"></canvas></div>
           </section>
       </div>
 
-      <div class="dashboard-panel span-4" data-panel="distribution">
+      <div class="dashboard-panel panel--chart span-4" data-panel="distribution">
         <section class="card">
             <div class="card-head"><div><h2>Latency distribution</h2><p>How pings spread across quality tiers</p></div></div>
             <div class="chart-wrap tall"><canvas id="distribution-chart"></canvas></div>
           </section>
       </div>
 
-      <div class="dashboard-panel span-6" data-panel="jitter">
+      <div class="dashboard-panel panel--chart span-6" data-panel="jitter">
         <section class="card">
             <div class="card-head"><div><h2>Jitter</h2><p>Timing variation between pings - lower is steadier</p></div></div>
             <div class="chart-wrap short"><canvas id="jitter-chart"></canvas></div>
           </section>
       </div>
 
-      <div class="dashboard-panel span-6" data-panel="loss">
+      <div class="dashboard-panel panel--chart span-6" data-panel="loss">
         <section class="card">
             <div class="card-head"><div><h2>Packet loss per minute</h2><p>Share of failed pings in each minute bucket</p></div></div>
             <div class="chart-wrap short"><canvas id="loss-chart"></canvas></div>
           </section>
       </div>
 
-      <div class="dashboard-panel span-12" data-panel="quality-timeline">
+      <div class="dashboard-panel panel--quality span-12" data-panel="quality-timeline">
         <section class="card">
             <div class="card-head"><div><h2>Connection quality timeline</h2><p>Each cell = 1 minute · green good · amber fair · red poor</p></div></div>
             <div class="timeline" id="quality-timeline"></div>
@@ -260,7 +254,7 @@
           </section>
       </div>
 
-      <div class="dashboard-panel span-6" data-panel="outages">
+      <div class="dashboard-panel panel--table span-6" data-panel="outages">
         <section class="card">
             <div class="card-head"><div><h2>Outages</h2><p>Stretches where pings failed in this window</p></div></div>
             <div class="table-wrap">
@@ -272,7 +266,7 @@
           </section>
       </div>
 
-      <div class="dashboard-panel span-6" data-panel="recent">
+      <div class="dashboard-panel panel--table span-6" data-panel="recent">
         <section class="card">
             <div class="card-head"><div><h2>Recent samples</h2><p>Latest pings, newest first</p></div></div>
             <div class="table-wrap">
@@ -393,8 +387,8 @@
 
   <script src="/static/js/views-model.js?v=4"></script>
   <script src="/static/js/dashboard-grid.js?v=3"></script>
-  <script src="/static/js/view-builder.js?v=3"></script>
   <script src="/static/js/dashboard-format.js?v=1"></script>
+  <script src="/static/js/view-builder.js?v=3"></script>
   <script src="/static/js/dashboard-rating.js?v=2"></script>
   <script src="/static/js/dashboard-sparkline.js?v=1"></script>
   <script src="/static/js/dashboard-render.js?v=2"></script>

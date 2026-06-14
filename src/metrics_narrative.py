@@ -1,11 +1,10 @@
 from datetime import datetime, timedelta, timezone
 
 from src.metrics_time import parse_ts
-from src.metrics_verdict import NOW_OFFLINE_TAIL_FAILURES, rate_loss_pct, rate_spike_rate
+from src.metrics_verdict import NOW_OFFLINE_TAIL_FAILURES, format_spike_count_label, rate_loss_pct, rate_spike_rate
+from src.metrics_windows import TREND_PRIOR_SECONDS, TREND_RECENT_SECONDS
 from src.sample_utils import window_avg_latency_and_loss
 
-TREND_RECENT_SECONDS = 120
-TREND_PRIOR_SECONDS = 600
 TREND_MIN_SAMPLES = 12
 TREND_LATENCY_DELTA_MS = 5.0
 TREND_LATENCY_DELTA_RATIO = 0.15
@@ -239,8 +238,7 @@ def build_status_narrative(
     summary_parts.append(f"loss {loss_pct:.1f}%")
     spike_count = flow.get("spike_count", 0)
     if spike_count:
-        plural = "s" if spike_count != 1 else ""
-        summary_parts.append(f"{spike_count} spike{plural}")
+        summary_parts.append(format_spike_count_label(spike_count))
     else:
         summary_parts.append("no spikes")
 

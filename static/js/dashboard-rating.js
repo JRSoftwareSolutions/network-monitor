@@ -12,7 +12,8 @@ window.DashboardRating = (() => {
   };
   const TICK = "#6f7f9b";
   const GRID = "rgba(140, 165, 210, 0.10)";
-  const MONO = "'JetBrains Mono', ui-monospace, monospace";
+
+  const INDICATOR_KEYS = ["ping", "jitter", "loss", "spikes"];
 
   const DEFAULT_THRESHOLDS = {
     ping: { great: 40, good: 70, okay: 110, max: 200 },
@@ -72,7 +73,6 @@ window.DashboardRating = (() => {
 
   function ratePing(v) { return rateByThresholds(v, "ping"); }
   function rateJitter(v) { return rateByThresholds(v, "jitter"); }
-  function rateLoss(v) { return rateByThresholds(v, "loss"); }
 
   function bucketQuality(bucket) {
     if (!bucket || !bucket.sample_count) return "empty";
@@ -94,18 +94,30 @@ window.DashboardRating = (() => {
     document.body.dataset.level = level || "no_data";
   }
 
+  function updateHeartbeatLegend(container) {
+    if (!container) return;
+    const tiers = THRESHOLDS.ping;
+    container.innerHTML = [
+      `<span><i class="lg-great"></i>&lt;${tiers.great}</span>`,
+      `<span><i class="lg-good"></i>&lt;${tiers.good}</span>`,
+      `<span><i class="lg-okay"></i>&lt;${tiers.okay}</span>`,
+      `<span><i class="lg-bad"></i>≥${tiers.okay}</span>`,
+      `<span><i class="lg-fail"></i>fail</span>`,
+    ].join("");
+  }
+
   return {
     COLORS,
     TICK,
     GRID,
-    MONO,
+    INDICATOR_KEYS,
     get SCALE() { return SCALE; },
     get THRESHOLDS() { return THRESHOLDS; },
     applyThresholds,
     ratePing,
     rateJitter,
-    rateLoss,
     bucketQuality,
     applyAccent,
+    updateHeartbeatLegend,
   };
 })();

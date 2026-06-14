@@ -168,7 +168,7 @@
   function populateWindowOptions(options, selected) {
     const select = $("window-select");
     select.innerHTML = "";
-    const stored = Number(localStorage.getItem("nm.windowMinutes"));
+    const stored = Number(localStorage.getItem(ViewsModel.STORAGE_KEYS.windowMinutes));
     const value = stored && options.includes(stored) ? stored : selected;
     for (const opt of options) {
       const o = document.createElement("option");
@@ -186,6 +186,7 @@
     if (window.DashboardRating && config.gaming_thresholds) {
       window.DashboardRating.applyThresholds(config.gaming_thresholds);
     }
+    window.DashboardRating?.updateHeartbeatLegend($("hb-legend"));
     setText("target-label", config.target || dash);
     populateWindowOptions(config.window_options && config.window_options.length ? config.window_options : [5, 15, 30, 60, 120], config.default_window_minutes || 30);
     state.pollIntervalMs = Math.max(250, (config.ping_interval_seconds || 1) * 1000);
@@ -319,7 +320,7 @@
 
     $("window-select").addEventListener("change", (e) => {
       state.windowMinutes = Number(e.target.value);
-      localStorage.setItem("nm.windowMinutes", e.target.value);
+      localStorage.setItem(ViewsModel.STORAGE_KEYS.windowMinutes, e.target.value);
       poll(true);
     });
 

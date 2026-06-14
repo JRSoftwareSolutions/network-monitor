@@ -3,9 +3,8 @@
 window.DashboardCharts = (() => {
   const F = window.DashboardFormat;
   const R = window.DashboardRating;
-  const DR = window.DashboardRender;
   const { fmtMs, hhmm } = F;
-  const { COLORS, TICK, GRID, ratePing } = R;
+  const { COLORS, TICK, GRID, ratePing, bucketQuality } = R;
 
   const charts = {};
 
@@ -174,7 +173,7 @@ window.DashboardCharts = (() => {
       charts.blocks.data.labels = buckets.map((b) => hhmm(b.ts_start));
       charts.blocks.data.datasets[0].data = buckets.map((b) => b.avg_ms ?? null);
       charts.blocks.data.datasets[0].backgroundColor = buckets.map((b) => {
-        const q = DR.bucketQuality(b);
+        const q = bucketQuality(b);
         return q === "poor" ? COLORS.bad : q === "fair" ? COLORS.okay : q === "good" ? COLORS.great : GRID;
       });
       charts.blocks.update("none");
