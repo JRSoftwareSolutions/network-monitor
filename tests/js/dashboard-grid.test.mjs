@@ -10,7 +10,6 @@ test("normalizeLayoutItem clamps width and preserves order", () => {
   });
   assert.equal(item.w, 12);
   assert.equal(item.order, 0);
-  assert.equal(item.size, undefined);
 });
 
 test("normalizeLayoutItem forces single column below breakpoint", () => {
@@ -29,18 +28,4 @@ test("normalizeLayoutMap fills all default panels", () => {
   assert.equal(Object.keys(map).length, ViewsModel.PANEL_DEFS.length);
   assert.equal(map.hero.w, 12);
   assert.ok(map.recent);
-});
-
-test("normalizeLayoutItem migrates legacy GridStack records", () => {
-  const { DashboardGrid } = loadDashboardGridGlobals();
-  const item = DashboardGrid.normalizeLayoutItem("latency", {
-    x: 0,
-    y: 11,
-    w: 8,
-    h: 4,
-    size: "tall",
-  });
-  assert.equal(item.w, 8);
-  assert.equal(item.order, 1100);
-  assert.equal(item.size, undefined);
 });

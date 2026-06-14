@@ -9,7 +9,6 @@ const ViewsModel = (() => {
     panelPrefs: "networkMonitor.panelPrefs",
     customViews: "networkMonitor.customViews",
     panelLayoutPrefs: "networkMonitor.panelLayoutPrefs",
-    layoutPanelWidth: "networkMonitor.layoutPanelWidth",
   };
 
   const PANEL_GROUPS = {
@@ -38,12 +37,6 @@ const ViewsModel = (() => {
 
   const VIEW_LABELS = {
     default: "Default",
-    analytics: "Analytics",
-  };
-
-  const VIEW_DESCRIPTIONS = {
-    default: "Full dashboard with live monitoring and history",
-    analytics: "Charts and tables focused on window analytics",
   };
 
   const VIEW_DEFAULTS = {
@@ -53,21 +46,6 @@ const ViewsModel = (() => {
       indicators: true,
       live: true,
       narrative: true,
-      stats: true,
-      latency: true,
-      distribution: true,
-      jitter: true,
-      loss: true,
-      "quality-timeline": true,
-      outages: true,
-      recent: true,
-    },
-    analytics: {
-      hero: false,
-      status: true,
-      indicators: false,
-      live: false,
-      narrative: false,
       stats: true,
       latency: true,
       distribution: true,
@@ -89,21 +67,6 @@ const ViewsModel = (() => {
       stats: { w: 12, order: 5 },
       latency: { w: 8, order: 6 },
       distribution: { w: 4, order: 7 },
-      jitter: { w: 6, order: 8 },
-      loss: { w: 6, order: 9 },
-      "quality-timeline": { w: 12, order: 10 },
-      outages: { w: 6, order: 11 },
-      recent: { w: 6, order: 12 },
-    },
-    analytics: {
-      hero: { w: 12, order: 0 },
-      status: { w: 12, order: 1 },
-      indicators: { w: 12, order: 2 },
-      live: { w: 12, order: 3 },
-      narrative: { w: 12, order: 4 },
-      stats: { w: 12, order: 5 },
-      latency: { w: 12, order: 6 },
-      distribution: { w: 6, order: 7 },
       jitter: { w: 6, order: 8 },
       loss: { w: 6, order: 9 },
       "quality-timeline": { w: 12, order: 10 },
@@ -388,50 +351,6 @@ const ViewsModel = (() => {
     return true;
   }
 
-  function renameCustomView(viewId, label) {
-    if (!isCustomView(viewId)) return false;
-    const trimmed = label.trim();
-    if (!trimmed) return false;
-    customViews[viewId].label = trimmed;
-    saveCustomViews();
-    return true;
-  }
-
-  function duplicateCustomView(viewId) {
-    if (!isValidViewId(viewId)) return null;
-    const label = `${getViewLabel(viewId)} copy`;
-    const newId = createCustomView(label, viewId);
-    return newId;
-  }
-
-  function exportViewsJson() {
-    return JSON.stringify({
-      version: 2,
-      exportedAt: new Date().toISOString(),
-      customViews,
-      panelPrefs,
-      panelLayoutPrefs,
-    }, null, 2);
-  }
-
-  function importViewsJson(raw) {
-    const data = typeof raw === "string" ? JSON.parse(raw) : raw;
-    if (!data || typeof data !== "object") throw new Error("Invalid import file");
-    if (data.customViews && typeof data.customViews === "object") {
-      customViews = data.customViews;
-      loadCustomViews();
-      saveCustomViews();
-    }
-    if (data.panelPrefs && typeof data.panelPrefs === "object") {
-      panelPrefs = data.panelPrefs;
-      savePanelPrefs();
-    }
-    if (data.panelLayoutPrefs && typeof data.panelLayoutPrefs === "object") {
-      panelLayoutPrefs = data.panelLayoutPrefs;
-      savePanelLayoutPrefs();
-    }
-  }
-
   function init() {
     loadCustomViews();
     loadPanelPrefs();
@@ -446,7 +365,6 @@ const ViewsModel = (() => {
     PANEL_GROUPS,
     PANEL_DEFS,
     VIEW_LABELS,
-    VIEW_DESCRIPTIONS,
     VIEW_DEFAULTS,
     LAYOUT_DEFAULTS,
     panelIds,
@@ -467,10 +385,6 @@ const ViewsModel = (() => {
     resetPanelLayout,
     createCustomView,
     deleteCustomView,
-    renameCustomView,
-    duplicateCustomView,
-    exportViewsJson,
-    importViewsJson,
     init,
   };
 })();

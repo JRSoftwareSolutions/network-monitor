@@ -172,51 +172,21 @@ On Windows, pings use the native `IcmpSendEcho` API (no `ping.exe` subprocess pe
 | `network_info.py` | Windows connection label for the UI |
 | `win_ping.py` / `win_proc.py` / `jitter.py` | Native ICMP, process helpers, jitter tracker |
 
-### Frontend (`static/js/` — zero-build IIFE modules on `window.NM`)
+### Frontend (`static/`)
 
-Scripts load in dependency order from `index.html`. Each file registers its public API on `NM` (e.g. `NM.constants`, `NM.grid`, `NM.views`).
+Scripts load in dependency order from `index.html`:
 
-| Module | Role |
-|--------|------|
-| `namespace.js` | Creates `window.NM` |
-| `constants.js`, `rating-format.js` | Thresholds, formatting |
-| `chart-config.js`, `charts-*.js`, `chart-plugins.js` | Chart.js setup |
-| `dashboard-grid.js` | GridStack layout (`NM.grid`) |
-| `views-model.js`, `views-panels.js`, `views-dialog.js`, `view-builder.js` | Dashboard views/layout (`NM.views`) |
-| `app-*.js`, `../app.js` | App shell, polling, UI wiring (`NM.app`) |
+| File | Role |
+|------|------|
+| `static/css/dashboard.css` | Hand-authored dashboard styles (no build step) |
+| `static/js/views-model.js` | View presets, panel visibility, layout persistence |
+| `static/js/dashboard-grid.js` | Native CSS grid layout (width, order, edit mode) |
+| `static/js/view-builder.js` | View selector, layout editor UI |
+| `static/js/dashboard.js` | Charts, polling, metrics rendering |
 
-## CSS architecture
+## CSS
 
-Styles are bundled from a single SCSS entry point through Sass and PostCSS:
-
-| File | Responsibility |
-|------|----------------|
-| `static/scss/main.scss` | Source entry — `@use` chain in layer order |
-| `static/css/app.css` | Built bundle loaded by the dashboard (`npm run build:css`) |
-| `static/scss/abstracts/_tokens.scss` | Design tokens (`:root` vars, `@property` rules) |
-| `static/scss/abstracts/_breakpoints.scss` | Sass breakpoint mixins (`bp-md`, etc.) |
-| `static/scss/components/_shell.scss` | Page chrome, hero, status panel appearance |
-| `static/scss/components/_tiles.scss` | Indicators, live feed tiles, settings popover |
-| `static/scss/components/_data.scss` | History panels, charts, tables |
-| `static/scss/components/_dashboard-grid.scss` | **GridStack layout** — positioning, edit mode, size presets |
-| `static/css/vendor-gridstack.css` | GridStack vendor styles (committed; refresh with `npm run vendor:gridstack`) |
-| `static/scss/_overrides.scss` | Theme mappings and final cascade overrides |
-
-**Rules:**
-
-- The app loads one stylesheet: `/static/css/app.css` (rebuild after editing SCSS source files).
-- Never add `.grid-stack-*` selectors outside `_dashboard-grid.scss` or `vendor-gridstack.css`.
-- Panel wrappers (`[data-panel]`) hold GridStack attributes; inner `<section>` elements hold visual classes.
-- Dynamic sizing uses CSS custom properties set from JS (`--hb-height`, `--arc-offset`, etc.).
-
-```bash
-npm run build:css        # compile main.scss → app.css (via main.interim.css)
-npm run watch:css        # rebuild SCSS → app.css on change (sass + postcss in parallel)
-npm run vendor:gridstack # copy GridStack CSS from node_modules (do not curl the CDN)
-npm run lint:css         # stylelint guardrails
-```
-
-Layer order is declared in `static/scss/base/_layers.scss`: `tokens → reset → vendor → primitives → components → utilities → overrides`.
+The dashboard loads a single committed stylesheet: `/static/css/dashboard.css`. Edit it directly — there is no Sass/PostCSS build chain.
 
 ## Tests
 
@@ -231,10 +201,7 @@ JavaScript unit tests + Playwright e2e:
 
 ```bash
 npm install
-npm run build:css
 npm test
 ```
-
-The test chain runs `build:css` → `lint:css` → `test:unit` → `test:e2e`.
 
 `npm run test:py` runs the Python suite; `npm run test:unit` and `npm run test:e2e` run JS tests separately.

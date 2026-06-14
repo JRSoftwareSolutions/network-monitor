@@ -1,9 +1,8 @@
-/* ---------- native CSS grid dashboard layout (no GridStack) ---------- */
+/* ---------- native CSS grid dashboard layout ---------- */
 
 const DashboardGrid = (() => {
   const GRID_COLUMNS = 12;
   const SINGLE_COLUMN_BREAKPOINT = 832;
-  const WIDTH_OPTIONS = [12, 8, 7, 6, 5, 4, 3];
 
   const GRID_PANEL_META = {
     hero: { minW: 6, maxW: 12 },
@@ -27,7 +26,6 @@ const DashboardGrid = (() => {
   let editMode = false;
   let selectedPanelId = null;
   let dragPanelId = null;
-  let changeCallbacks = [];
   let changeTimer = null;
 
   function clamp(value, min, max) {
@@ -42,21 +40,6 @@ const DashboardGrid = (() => {
     return GRID_PANEL_META[panelId] ?? { minW: 3, maxW: 12 };
   }
 
-  /** Migrate legacy GridStack { x, y, w, h } records to { w, order }. */
-  function migrateLayoutItem(panelId, item = {}, rawItem = {}) {
-    const isLegacy = rawItem.x != null || rawItem.y != null || rawItem.h != null;
-    if (!isLegacy && item.order != null && item.w != null) {
-      return item;
-    }
-    const order = isLegacy && Number.isFinite(rawItem.y)
-      ? rawItem.y * 100 + (Number.isFinite(rawItem.x) ? rawItem.x : 0)
-      : (Number.isFinite(item.order) ? item.order : defaultOrder(panelId));
-    return {
-      w: item.w,
-      order,
-    };
-  }
-
   function defaultOrder(panelId) {
     const index = PANEL_ORDER.indexOf(panelId);
     return index >= 0 ? index : 0;
@@ -66,14 +49,13 @@ const DashboardGrid = (() => {
     const meta = getMeta(panelId);
     const defaults = ViewsModel.getLayoutDefaultsForView(ViewsModel.currentView)[panelId] ?? {};
     const merged = { ...defaults, ...item };
-    const source = migrateLayoutItem(panelId, merged, item);
-    let w = Number.isFinite(source.w) ? source.w : defaults.w ?? 12;
+    let w = Number.isFinite(merged.w) ? merged.w : defaults.w ?? 12;
     w = clamp(w, meta.minW, meta.maxW);
     if (isSingleColumnViewport()) w = GRID_COLUMNS;
 
     return {
       w,
-      order: Number.isFinite(source.order) ? source.order : defaultOrder(panelId),
+      order: Number.isFinite(merged.order) ? merged.order : defaultOrder(panelId),
     };
   }
 
@@ -126,7 +108,6 @@ const DashboardGrid = (() => {
 
   function dispatchLayoutChange() {
     window.dispatchEvent(new CustomEvent("nm:layout-change"));
-    for (const cb of changeCallbacks) cb(readLayoutFromDom());
   }
 
   function scheduleLayoutChange() {
@@ -305,10 +286,6 @@ const DashboardGrid = (() => {
     return editMode;
   }
 
-  function onLayoutChange(callback) {
-    changeCallbacks.push(callback);
-  }
-
   function init() {
     gridEl = document.getElementById("dashboard-grid");
     bindEditInteractions();
@@ -318,7 +295,6 @@ const DashboardGrid = (() => {
   return {
     GRID_COLUMNS,
     SINGLE_COLUMN_BREAKPOINT,
-    WIDTH_OPTIONS,
     GRID_PANEL_META,
     normalizeLayoutItem,
     normalizeLayoutMap,
@@ -327,10 +303,7 @@ const DashboardGrid = (() => {
     setEditMode,
     isEditMode,
     selectPanel,
-    getSelectedPanel: () => selectedPanelId,
     setSelectedPanelWidth,
-    onLayoutChange,
-    readLayoutFromDom,
     init,
   };
 })();

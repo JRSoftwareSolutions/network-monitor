@@ -290,16 +290,22 @@ body[data-layout-edit="true"] .dashboard-panel:not(.is-panel-hidden) {
   position: relative;
 }
 
-body[data-layout-edit="true"] .dashboard-panel.is-panel-selected > .card,
-body[data-layout-edit="true"] .dashboard-panel.is-panel-selected > .indicators {
-  outline: 2px solid var(--accent);
-  outline-offset: 3px;
+body[data-layout-edit="true"] .dashboard-panel.is-panel-selected::after,
+body[data-layout-edit="true"] .dashboard-panel.is-panel-drop-target::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius);
+  pointer-events: none;
+  z-index: 5;
 }
 
-body[data-layout-edit="true"] .dashboard-panel.is-panel-drop-target > .card,
-body[data-layout-edit="true"] .dashboard-panel.is-panel-drop-target > .indicators {
-  outline: 2px dashed var(--good);
-  outline-offset: 3px;
+body[data-layout-edit="true"] .dashboard-panel.is-panel-selected::after {
+  border: 2px solid var(--accent);
+}
+
+body[data-layout-edit="true"] .dashboard-panel.is-panel-drop-target::after {
+  border: 2px dashed var(--good);
 }
 
 .dashboard-panel.is-panel-dragging {

@@ -28,7 +28,6 @@ export function loadDashboardGridGlobals(options = {}) {
       body: { toggleAttribute: () => {}, setAttribute: () => {}, removeAttribute: () => {} },
       addEventListener: () => {},
     },
-    GridStack: undefined,
     console,
     setTimeout,
     clearTimeout,

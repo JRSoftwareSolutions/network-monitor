@@ -8,7 +8,6 @@ const ViewBuilder = (() => {
   let viewSelect = null;
   let layoutEditMode = false;
   let draftVisibility = null;
-  let onViewApplied = null;
   let onLayoutApplied = null;
 
   const els = {};
@@ -124,7 +123,6 @@ const ViewBuilder = (() => {
     if (!options.skipSelect && viewSelect) viewSelect.value = viewId;
     syncDraftVisibility();
     DG.applyCurrentView();
-    onViewApplied?.({ viewId, needsHistory: true });
     onLayoutApplied?.();
     renderPanelGroups();
     updateSettingsSummary();
@@ -366,7 +364,6 @@ const ViewBuilder = (() => {
   }
 
   function init(options = {}) {
-    onViewApplied = options.onViewApplied ?? null;
     onLayoutApplied = options.onLayoutApplied ?? null;
     VM.init();
     cacheElements();
@@ -384,8 +381,6 @@ const ViewBuilder = (() => {
     exitEditMode,
     getCurrentView: () => VM.currentView,
     updateSettingsLayoutSummary: updateSettingsSummary,
-    onViewChange(cb) { onViewApplied = cb; },
-    onLayoutChange(cb) { onLayoutApplied = cb; },
   };
 })();
 
