@@ -57,7 +57,6 @@ function applyLiveMetrics(payload) {
   updateIndicators(now);
   updateLiveFeed(now, recentSamples);
   updateRecentTable(recentSamples);
-  checkConnectionAlerts(now, null);
 
   lastUpdatedAt = Date.now();
   updateStalenessIndicator();
@@ -103,7 +102,6 @@ function applyMetrics(payload) {
   updateLossChart(blocks, windowMins, payload.latest_ts);
   updateRecentTable(recentSamples ?? samples);
   updateOutagesTable(outages);
-  checkConnectionAlerts(now, outages);
 
   lastUpdatedAt = Date.now();
   updateStalenessIndicator();
@@ -574,7 +572,6 @@ async function bootstrap() {
   initSettings();
   initHelpPopovers();
   initMetricsExport();
-  initConnectionAlerts();
 
   try {
     initCharts();

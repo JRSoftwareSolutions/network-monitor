@@ -949,59 +949,6 @@ tbody tr[class*="table-row--"] td:first-child {
   z-index: 2;
 }
 
-.alert-toast {
-  position: fixed;
-  right: 1rem;
-  bottom: 1rem;
-  z-index: 1200;
-  display: flex;
-  align-items: center;
-  gap: 0.55rem;
-  max-width: min(24rem, calc(100vw - 2rem));
-  padding: 0.65rem 0.85rem;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 93, 108, 0.45);
-  background: rgba(12, 18, 30, 0.94);
-  color: var(--text);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
-}
-
-.alert-toast[data-level="offline"],
-.alert-toast[data-level="bad"] {
-  border-color: rgba(255, 93, 108, 0.55);
-}
-
-.alert-toast[data-level="okay"] {
-  border-color: rgba(255, 194, 77, 0.55);
-}
-
-.alert-toast__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: var(--bad);
-  flex-shrink: 0;
-}
-
-.alert-toast__text {
-  flex: 1;
-  font-size: 0.84rem;
-}
-
-.alert-toast__close {
-  font: inherit;
-  color: var(--muted);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0.15rem 0.25rem;
-  line-height: 1;
-}
-
-.alert-toast__close:hover {
-  color: var(--text);
-}
-
 .stat-value[data-rating="great"],
 .stat-value[data-rating="good"] {
   color: var(--great);
