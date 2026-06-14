@@ -14,16 +14,81 @@ window.DashboardRating = (() => {
   const GRID = "rgba(140, 165, 210, 0.10)";
   const MONO = "'JetBrains Mono', ui-monospace, monospace";
 
-  const SCALE = {
-    ping: [0, 40, 70, 110, 200],
-    jitter: [0, 8, 15, 30, 60],
-    loss: [0, 0, 1, 3, 15],
-    spikes: [0, 0, 1, 4, 10],
+  const DEFAULT_THRESHOLDS = {
+    ping: { great: 40, good: 70, okay: 110, max: 200 },
+    jitter: { great: 8, good: 15, okay: 30, max: 60 },
+    loss: { great: 0, good: 1, okay: 3, max: 15 },
+    spikes: { great: 0, good: 1, okay: 4, max: 10 },
   };
 
-  function ratePing(v) { return v < 40 ? "great" : v < 70 ? "good" : v < 110 ? "okay" : "bad"; }
-  function rateJitter(v) { return v < 8 ? "great" : v < 15 ? "good" : v < 30 ? "okay" : "bad"; }
-  function rateLoss(v) { return v <= 0 ? "great" : v < 1 ? "good" : v <= 3 ? "okay" : "bad"; }
+  let THRESHOLDS = structuredClone(DEFAULT_THRESHOLDS);
+
+  function buildScale(key) {
+    const tiers = THRESHOLDS[key];
+    return [0, tiers.great, tiers.good, tiers.okay, tiers.max];
+  }
+
+  function buildAllScales() {
+    return {
+      ping: buildScale("ping"),
+      jitter: buildScale("jitter"),
+      loss: buildScale("loss"),
+      spikes: buildScale("spikes"),
+    };
+  }
+
+  let SCALE = buildAllScales();
+
+  function applyThresholds(next) {
+    if (!next || typeof next !== "object") return;
+    THRESHOLDS = {
+      ping: { ...DEFAULT_THRESHOLDS.ping, ...next.ping },
+      jitter: { ...DEFAULT_THRESHOLDS.jitter, ...next.jitter },
+      loss: { ...DEFAULT_THRESHOLDS.loss, ...next.loss },
+      spikes: { ...DEFAULT_THRESHOLDS.spikes, ...next.spikes },
+    };
+    SCALE = buildAllScales();
+  }
+
+  function rateByThresholds(value, key) {
+    const tiers = THRESHOLDS[key];
+    if (key === "loss") {
+      if (value <= 0) return "great";
+      if (value < tiers.good) return "good";
+      if (value <= tiers.okay) return "okay";
+      return "bad";
+    }
+    if (key === "spikes") {
+      if (value <= 0) return "great";
+      if (value < tiers.good) return "good";
+      if (value <= tiers.okay) return "okay";
+      return "bad";
+    }
+    if (value < tiers.great) return "great";
+    if (value < tiers.good) return "good";
+    if (value < tiers.okay) return "okay";
+    return "bad";
+  }
+
+  function ratePing(v) { return rateByThresholds(v, "ping"); }
+  function rateJitter(v) { return rateByThresholds(v, "jitter"); }
+  function rateLoss(v) { return rateByThresholds(v, "loss"); }
+
+  function bucketQuality(bucket) {
+    if (!bucket || !bucket.sample_count) return "empty";
+    if (bucket.quality) return bucket.quality;
+    const loss = bucket.loss_pct || 0;
+    const avg = bucket.avg_ms;
+    const jit = bucket.jitter_avg_ms;
+    const tiers = THRESHOLDS;
+    if (loss > tiers.loss.okay || (avg != null && avg >= tiers.ping.okay) || (jit != null && jit >= tiers.jitter.okay)) {
+      return "poor";
+    }
+    if (loss >= tiers.loss.good || (avg != null && avg >= tiers.ping.good) || (jit != null && jit >= tiers.jitter.good)) {
+      return "fair";
+    }
+    return "good";
+  }
 
   function applyAccent(level) {
     document.body.dataset.level = level || "no_data";
@@ -34,10 +99,13 @@ window.DashboardRating = (() => {
     TICK,
     GRID,
     MONO,
-    SCALE,
+    get SCALE() { return SCALE; },
+    get THRESHOLDS() { return THRESHOLDS; },
+    applyThresholds,
     ratePing,
     rateJitter,
     rateLoss,
+    bucketQuality,
     applyAccent,
   };
 })();

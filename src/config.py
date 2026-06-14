@@ -114,37 +114,41 @@ def _coerce_int(raw, default: int, *, key: str, errors: list[str]) -> int:
         return default
 
 
-def load_config(path: Path | None = None) -> Config:
-    config_path = path or DEFAULT_CONFIG_PATH
+def _read_yaml_raw(config_path: Path) -> tuple[dict, list[str]]:
     errors: list[str] = []
     raw: dict = {}
 
     if not config_path.exists():
         errors.append(f"Config file not found: {config_path}")
+        return raw, errors
+
+    try:
+        content = config_path.read_text(encoding="utf-8")
+    except OSError as exc:
+        errors.append(f"Cannot read config file: {exc}")
+        return raw, errors
+
+    if not content.strip():
+        errors.append("Config file is empty")
+        return raw, errors
+
+    try:
+        loaded = yaml.safe_load(content)
+    except yaml.YAMLError as exc:
+        errors.append(f"Invalid YAML in config: {exc}")
+        return raw, errors
+
+    if loaded is None:
+        errors.append("Config file contains no data")
+    elif not isinstance(loaded, dict):
+        errors.append("Config root must be a mapping")
     else:
-        try:
-            content = config_path.read_text(encoding="utf-8")
-        except OSError as exc:
-            errors.append(f"Cannot read config file: {exc}")
-        else:
-            if not content.strip():
-                errors.append("Config file is empty")
-            else:
-                try:
-                    loaded = yaml.safe_load(content)
-                except yaml.YAMLError as exc:
-                    errors.append(f"Invalid YAML in config: {exc}")
-                else:
-                    if loaded is None:
-                        errors.append("Config file contains no data")
-                    elif not isinstance(loaded, dict):
-                        errors.append("Config root must be a mapping")
-                    else:
-                        raw = loaded
+        raw = loaded
 
-    for message in errors:
-        _logger.warning("Config: %s", message)
+    return raw, errors
 
+
+def _parse_config_fields(raw: dict, errors: list[str]) -> Config:
     target_raw = raw.get("target", DEFAULT_TARGET)
     try:
         target = normalize_target(str(target_raw))
@@ -228,6 +232,14 @@ def load_config(path: Path | None = None) -> Config:
             raw.get("connection_refresh_seconds", DEFAULT_CONNECTION_REFRESH_SECONDS)
         ),
     )
+
+
+def load_config(path: Path | None = None) -> Config:
+    config_path = path or DEFAULT_CONFIG_PATH
+    raw, errors = _read_yaml_raw(config_path)
+    for message in errors:
+        _logger.warning("Config: %s", message)
+    return _parse_config_fields(raw, errors)
 
 
 def _yaml_number(value: float) -> int | float:

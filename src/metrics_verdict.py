@@ -1,8 +1,27 @@
 import threading
 from datetime import datetime, timedelta, timezone
 
+from src.metrics_constants import (
+    GAMING_JITTER_GOOD,
+    GAMING_JITTER_GREAT,
+    GAMING_JITTER_OKAY,
+    GAMING_LOSS_GOOD,
+    GAMING_LOSS_OKAY,
+    GAMING_PING_GOOD,
+    GAMING_PING_GREAT,
+    GAMING_PING_OKAY,
+    GAMING_SPIKE_GOOD,
+    GAMING_SPIKE_OKAY,
+    HEALTH_JITTER_DEGRADED,
+    HEALTH_JITTER_POOR,
+    HEALTH_LATENCY_DEGRADED,
+    HEALTH_LATENCY_POOR,
+    HEALTH_LOSS_DEGRADED,
+    HEALTH_LOSS_OFFLINE,
+    HEALTH_LOSS_POOR,
+)
 from src.metrics_time import median, parse_ts
-from src.sample_utils import sample_quality
+from src.sample_utils import filter_samples_since, sample_quality
 
 
 _HEALTH_LABELS = {
@@ -16,27 +35,27 @@ _SEVERITY_RANK = {"healthy": 0, "degraded": 1, "poor": 2, "offline": 3}
 
 
 def _loss_severity(packet_loss_pct: float) -> tuple[str, str | None]:
-    if packet_loss_pct >= 50:
+    if packet_loss_pct >= HEALTH_LOSS_OFFLINE:
         return "offline", f"packet loss {packet_loss_pct:.1f}%"
-    if packet_loss_pct >= 10:
+    if packet_loss_pct >= HEALTH_LOSS_POOR:
         return "poor", f"packet loss {packet_loss_pct:.1f}%"
-    if packet_loss_pct >= 1:
+    if packet_loss_pct >= HEALTH_LOSS_DEGRADED:
         return "degraded", f"packet loss {packet_loss_pct:.1f}%"
     return "healthy", None
 
 
 def _latency_severity(latency_avg_ms: float) -> tuple[str, str | None]:
-    if latency_avg_ms >= 200:
+    if latency_avg_ms >= HEALTH_LATENCY_POOR:
         return "poor", f"avg latency {latency_avg_ms:.1f} ms"
-    if latency_avg_ms >= 80:
+    if latency_avg_ms >= HEALTH_LATENCY_DEGRADED:
         return "degraded", f"avg latency {latency_avg_ms:.1f} ms"
     return "healthy", None
 
 
 def _jitter_severity(jitter_avg_ms: float) -> tuple[str, str | None]:
-    if jitter_avg_ms >= 50:
+    if jitter_avg_ms >= HEALTH_JITTER_POOR:
         return "poor", f"avg jitter {jitter_avg_ms:.1f} ms"
-    if jitter_avg_ms >= 20:
+    if jitter_avg_ms >= HEALTH_JITTER_DEGRADED:
         return "degraded", f"avg jitter {jitter_avg_ms:.1f} ms"
     return "healthy", None
 
@@ -78,7 +97,7 @@ def compute_now_stats(
     """Stats over the trailing `window_seconds` - the 'can I game right now?' window."""
     now_dt = now or datetime.now(timezone.utc)
     cutoff = now_dt - timedelta(seconds=window_seconds)
-    recent = [sample for sample in samples if parse_ts(sample["ts"]) >= cutoff]
+    recent = filter_samples_since(samples, cutoff)
 
     total = len(recent)
     latencies, jitters, failed, _ = sample_quality(recent)
@@ -126,9 +145,9 @@ def _rate_scale(value: float, great: float, good: float, okay: float) -> str:
 def rate_loss_pct(loss_pct: float) -> str:
     if loss_pct <= 0:
         return "great"
-    if loss_pct < 1:
+    if loss_pct < GAMING_LOSS_GOOD:
         return "good"
-    if loss_pct <= 3:
+    if loss_pct <= GAMING_LOSS_OKAY:
         return "okay"
     return "bad"
 
@@ -136,11 +155,29 @@ def rate_loss_pct(loss_pct: float) -> str:
 def rate_spike_rate(rate_per_min: float) -> str:
     if rate_per_min <= 0:
         return "great"
-    if rate_per_min < 1:
+    if rate_per_min < GAMING_SPIKE_GOOD:
         return "good"
-    if rate_per_min <= 4:
+    if rate_per_min <= GAMING_SPIKE_OKAY:
         return "okay"
     return "bad"
+
+
+def rate_bucket_quality(bucket: dict) -> str:
+    """Timeline/chart quality label (good/fair/poor/empty)."""
+    if not bucket or not bucket.get("sample_count"):
+        return "empty"
+    loss = bucket.get("loss_pct") or 0
+    avg = bucket.get("avg_ms")
+    jit = bucket.get("jitter_avg_ms")
+    if loss > GAMING_LOSS_OKAY or (avg is not None and avg >= GAMING_PING_OKAY) or (
+        jit is not None and jit >= GAMING_JITTER_OKAY
+    ):
+        return "poor"
+    if loss >= GAMING_LOSS_GOOD or (avg is not None and avg >= GAMING_PING_GOOD) or (
+        jit is not None and jit >= GAMING_JITTER_GOOD
+    ):
+        return "fair"
+    return "good"
 
 
 _INDICATOR_MEANINGS = {
@@ -188,10 +225,9 @@ def compute_baseline_and_spikes(
     cutoff = now_dt - timedelta(seconds=window_seconds)
     recent = [
         sample
-        for sample in samples
+        for sample in filter_samples_since(samples, cutoff)
         if sample.get("success")
         and sample.get("latency_ms") is not None
-        and parse_ts(sample["ts"]) >= cutoff
     ]
 
     baseline_cutoff = now_dt - timedelta(seconds=baseline_seconds)
@@ -228,27 +264,13 @@ def compute_baseline_and_spikes(
     }
 
 
-def compute_instant_verdict(now_stats: dict, flow: dict) -> dict:
-    """Worst-of verdict across baseline ping / jitter / loss / spike rate.
-
-    This is the raw, per-poll verdict; the displayed verdict goes through
-    VerdictStabilizer so it doesn't flap on single pings.
-    """
-    if not now_stats.get("sample_count"):
-        return {
-            "level": "no_data",
-            "label": _GAMING_LABELS["no_data"],
-            "reasons": [],
-            "ratings": {},
-            "indicators": {},
-        }
-
+def _build_indicators(now_stats: dict, flow: dict) -> dict[str, dict]:
     indicators: dict[str, dict] = {}
 
     baseline_ms = flow.get("baseline_ms")
     ping_value = baseline_ms if baseline_ms is not None else now_stats.get("avg_ms")
     if ping_value is not None:
-        level = _rate_scale(ping_value, 40, 70, 110)
+        level = _rate_scale(ping_value, GAMING_PING_GREAT, GAMING_PING_GOOD, GAMING_PING_OKAY)
         indicators["ping"] = {
             "level": level,
             "value": round(ping_value, 1),
@@ -258,7 +280,7 @@ def compute_instant_verdict(now_stats: dict, flow: dict) -> dict:
 
     jitter_ms = now_stats.get("jitter_ms")
     if jitter_ms is not None:
-        level = _rate_scale(jitter_ms, 8, 15, 30)
+        level = _rate_scale(jitter_ms, GAMING_JITTER_GREAT, GAMING_JITTER_GOOD, GAMING_JITTER_OKAY)
         indicators["jitter"] = {
             "level": level,
             "value": jitter_ms,
@@ -293,29 +315,60 @@ def compute_instant_verdict(now_stats: dict, flow: dict) -> dict:
         "meaning": _INDICATOR_MEANINGS["spikes"][spike_level],
     }
 
-    ratings = {key: indicator["level"] for key, indicator in indicators.items()}
+    return indicators
 
+
+def _offline_verdict(
+    now_stats: dict,
+    ratings: dict[str, str],
+    indicators: dict[str, dict],
+) -> dict | None:
     seconds_since_success = now_stats.get("seconds_since_success")
     offline = (
         now_stats.get("tail_failures", 0) >= NOW_OFFLINE_TAIL_FAILURES
         or seconds_since_success is None
         or seconds_since_success >= NOW_STALE_SUCCESS_SECONDS
     )
-    if offline:
-        tail_failures = now_stats.get("tail_failures", 0)
-        if tail_failures >= NOW_OFFLINE_TAIL_FAILURES:
-            reasons = [f"{tail_failures} pings failed in a row"]
-        elif seconds_since_success is None:
-            reasons = ["no successful ping in the recent window"]
-        else:
-            reasons = [f"no successful ping for {seconds_since_success:.0f}s"]
+    if not offline:
+        return None
+
+    tail_failures = now_stats.get("tail_failures", 0)
+    if tail_failures >= NOW_OFFLINE_TAIL_FAILURES:
+        reasons = [f"{tail_failures} pings failed in a row"]
+    elif seconds_since_success is None:
+        reasons = ["no successful ping in the recent window"]
+    else:
+        reasons = [f"no successful ping for {seconds_since_success:.0f}s"]
+    return {
+        "level": "offline",
+        "label": _GAMING_LABELS["offline"],
+        "reasons": reasons,
+        "ratings": ratings,
+        "indicators": indicators,
+    }
+
+
+def compute_instant_verdict(now_stats: dict, flow: dict) -> dict:
+    """Worst-of verdict across baseline ping / jitter / loss / spike rate.
+
+    This is the raw, per-poll verdict; the displayed verdict goes through
+    VerdictStabilizer so it doesn't flap on single pings.
+    """
+    if not now_stats.get("sample_count"):
         return {
-            "level": "offline",
-            "label": _GAMING_LABELS["offline"],
-            "reasons": reasons,
-            "ratings": ratings,
-            "indicators": indicators,
+            "level": "no_data",
+            "label": _GAMING_LABELS["no_data"],
+            "reasons": [],
+            "ratings": {},
+            "indicators": {},
         }
+
+    indicators = _build_indicators(now_stats, flow)
+    ratings = {key: indicator["level"] for key, indicator in indicators.items()}
+
+    offline = _offline_verdict(now_stats, ratings, indicators)
+    if offline is not None:
+        return offline
 
     worst = "great"
     for level in ratings.values():

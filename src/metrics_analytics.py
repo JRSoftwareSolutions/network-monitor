@@ -9,6 +9,7 @@ from src.metrics_time import (
     percentile,
     sort_samples_by_ts,
 )
+from src.metrics_verdict import rate_bucket_quality
 from src.sample_utils import ceil_div, parse_jsonl_sample, sample_quality
 
 
@@ -36,6 +37,45 @@ def read_samples(log_file: Path, window_minutes: int) -> list[dict]:
                 samples.append(sample)
 
     return sort_samples_by_ts(samples)
+
+
+def _bucket_starts_backwards(
+    end: datetime,
+    bucket_seconds: int,
+    num_buckets: int,
+) -> list[datetime]:
+    current_bucket = floor_to_bucket(end, bucket_seconds)
+    return [
+        current_bucket - timedelta(seconds=bucket_seconds * offset)
+        for offset in range(num_buckets - 1, -1, -1)
+    ]
+
+
+def _bucket_starts_for_window(
+    *,
+    end: datetime,
+    window_minutes: int,
+    bucket_seconds: int,
+) -> list[datetime]:
+    window_minutes = clamp_window_minutes(window_minutes)
+    num_buckets = max(1, (window_minutes * 60) // bucket_seconds)
+    return _bucket_starts_backwards(end, bucket_seconds, num_buckets)
+
+
+def _bucket_starts_for_span(
+    *,
+    first_ts: datetime,
+    last_ts: datetime,
+    bucket_seconds: int,
+) -> list[datetime]:
+    first_bucket = floor_to_bucket(first_ts, bucket_seconds)
+    last_bucket = floor_to_bucket(last_ts, bucket_seconds)
+    bucket_starts: list[datetime] = []
+    current = first_bucket
+    while current <= last_bucket:
+        bucket_starts.append(current)
+        current += timedelta(seconds=bucket_seconds)
+    return bucket_starts
 
 
 BLOCKS_BUCKET_SECONDS = 60
@@ -74,21 +114,15 @@ def downsample_samples(
 
     if window_minutes is not None:
         num_buckets = ceil_div(span_seconds, bucket_seconds)
-        current_bucket = floor_to_bucket(end, bucket_seconds)
-        bucket_starts = [
-            current_bucket - timedelta(seconds=bucket_seconds * offset)
-            for offset in range(num_buckets - 1, -1, -1)
-        ]
+        bucket_starts = _bucket_starts_backwards(end, bucket_seconds, num_buckets)
     else:
         first_ts = parse_ts(samples[0]["ts"])
         last_ts = parse_ts(samples[-1]["ts"])
-        first_bucket = floor_to_bucket(first_ts, bucket_seconds)
-        last_bucket = floor_to_bucket(last_ts, bucket_seconds)
-        bucket_starts = []
-        current = first_bucket
-        while current <= last_bucket:
-            bucket_starts.append(current)
-            current += timedelta(seconds=bucket_seconds)
+        bucket_starts = _bucket_starts_for_span(
+            first_ts=first_ts,
+            last_ts=last_ts,
+            bucket_seconds=bucket_seconds,
+        )
 
     downsampled: list[dict] = []
     cumulative_failed = 0
@@ -185,13 +219,11 @@ def bucket_samples(
         grouped.setdefault(bucket_start, []).append(sample)
 
     if window_minutes is not None:
-        window_minutes = clamp_window_minutes(window_minutes)
-        num_buckets = max(1, (window_minutes * 60) // bucket_seconds)
-        current_bucket = floor_to_bucket(end, bucket_seconds)
-        bucket_starts = [
-            current_bucket - timedelta(seconds=bucket_seconds * offset)
-            for offset in range(num_buckets - 1, -1, -1)
-        ]
+        bucket_starts = _bucket_starts_for_window(
+            end=end,
+            window_minutes=window_minutes,
+            bucket_seconds=bucket_seconds,
+        )
     else:
         bucket_starts = sorted(grouped.keys())
 
@@ -203,6 +235,7 @@ def bucket_samples(
             {
                 "ts_start": format_ts(bucket_start),
                 "ts_end": format_ts(bucket_end),
+                "quality": rate_bucket_quality(summary),
                 **summary,
             }
         )

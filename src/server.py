@@ -1,5 +1,3 @@
-import re
-import threading
 from contextlib import asynccontextmanager
 
 import uvicorn
@@ -9,6 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from src.api_payloads import build_live_payload, build_metrics_payload
+from src.metrics_constants import gaming_thresholds_payload
 from src.config import (
     BUNDLE_ROOT,
     MAX_LOG_AGE_MINUTES,
@@ -107,6 +106,7 @@ def _config_payload() -> dict:
         "window_options": compute_window_options(config.max_log_age_minutes),
         "full_refresh_seconds": config.full_refresh_seconds,
         "connection_refresh_seconds": config.connection_refresh_seconds,
+        "gaming_thresholds": gaming_thresholds_payload(),
     }
 
 

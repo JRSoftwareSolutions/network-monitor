@@ -194,13 +194,21 @@ const ViewsModel = (() => {
     return visibility;
   }
 
-  function loadCustomViews() {
+  function loadJson(key, fallback) {
     try {
-      const raw = localStorage.getItem(STORAGE_KEYS.customViews);
-      customViews = raw ? JSON.parse(raw) : {};
+      const raw = localStorage.getItem(key);
+      return raw ? JSON.parse(raw) : fallback;
     } catch {
-      customViews = {};
+      return fallback;
     }
+  }
+
+  function saveJson(key, value) {
+    localStorage.setItem(key, JSON.stringify(value));
+  }
+
+  function loadCustomViews() {
+    customViews = loadJson(STORAGE_KEYS.customViews, {});
     for (const [id, view] of Object.entries(customViews)) {
       if (!view || typeof view !== "object") {
         delete customViews[id];
@@ -214,33 +222,23 @@ const ViewsModel = (() => {
   }
 
   function saveCustomViews() {
-    localStorage.setItem(STORAGE_KEYS.customViews, JSON.stringify(customViews));
+    saveJson(STORAGE_KEYS.customViews, customViews);
   }
 
   function loadPanelPrefs() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEYS.panelPrefs);
-      panelPrefs = raw ? JSON.parse(raw) : {};
-    } catch {
-      panelPrefs = {};
-    }
+    panelPrefs = loadJson(STORAGE_KEYS.panelPrefs, {});
   }
 
   function savePanelPrefs() {
-    localStorage.setItem(STORAGE_KEYS.panelPrefs, JSON.stringify(panelPrefs));
+    saveJson(STORAGE_KEYS.panelPrefs, panelPrefs);
   }
 
   function loadPanelLayoutPrefs() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEYS.panelLayoutPrefs);
-      panelLayoutPrefs = raw ? JSON.parse(raw) : {};
-    } catch {
-      panelLayoutPrefs = {};
-    }
+    panelLayoutPrefs = loadJson(STORAGE_KEYS.panelLayoutPrefs, {});
   }
 
   function savePanelLayoutPrefs() {
-    localStorage.setItem(STORAGE_KEYS.panelLayoutPrefs, JSON.stringify(panelLayoutPrefs));
+    saveJson(STORAGE_KEYS.panelLayoutPrefs, panelLayoutPrefs);
   }
 
   function getPanelOverrides(viewId) {

@@ -30,7 +30,7 @@
     fullRefreshMs: 60000,
     connRefreshMs: 120000,
     sparklineNow: null,
-    sparklineSamples: [],
+    indicatorSeries: null,
     heartbeatSamples: [],
   };
 
@@ -54,12 +54,13 @@
   function renderLiveSections(payload) {
     const now = payload.now || {};
     const samples = recentSamples(payload);
+    state.indicatorSeries = payload.indicator_series || null;
     DR.renderHero(now);
     DR.renderStatus(now);
-    DR.renderIndicators(now, samples);
+    DR.renderIndicators(now);
     DR.renderLive(now, samples);
     DR.renderNarrative(now);
-    DR.updateIndicatorSparklines(now, samples);
+    DR.updateIndicatorSparklines(now, payload.indicator_series);
   }
 
   function renderGraphSections(payload) {
@@ -182,6 +183,9 @@
   function applyConfig(config) {
     const prevFullRefreshMs = state.fullRefreshMs;
     state.config = config;
+    if (window.DashboardRating && config.gaming_thresholds) {
+      window.DashboardRating.applyThresholds(config.gaming_thresholds);
+    }
     setText("target-label", config.target || dash);
     populateWindowOptions(config.window_options && config.window_options.length ? config.window_options : [5, 15, 30, 60, 120], config.default_window_minutes || 30);
     state.pollIntervalMs = Math.max(250, (config.ping_interval_seconds || 1) * 1000);
@@ -190,6 +194,15 @@
     if (prevFullRefreshMs !== state.fullRefreshMs) state.lastFullRefreshAt = 0;
     schedulePoll();
     scheduleConnection();
+  }
+
+  function parseConfigError(res, body) {
+    let detail = `Save failed (HTTP ${res.status})`;
+    if (typeof body.detail === "string") return body.detail;
+    if (Array.isArray(body.detail) && body.detail[0]) {
+      return String(body.detail[0].msg || detail).replace(/^Value error,\s*/, "");
+    }
+    return detail;
   }
 
   function initSettings() {
@@ -262,8 +275,9 @@
         });
         if (!res.ok) {
           let detail = `Save failed (HTTP ${res.status})`;
-          try { const body = await res.json(); if (typeof body.detail === "string") detail = body.detail;
-            else if (Array.isArray(body.detail) && body.detail[0]) detail = String(body.detail[0].msg || detail).replace(/^Value error,\s*/, ""); } catch {}
+          try {
+            detail = parseConfigError(res, await res.json());
+          } catch {}
           errorEl.textContent = detail;
           return;
         }
@@ -281,7 +295,7 @@
 
   function resizeCharts() {
     DC.resizeCharts();
-    DR.updateIndicatorSparklines(state.sparklineNow, state.sparklineSamples);
+    DR.updateIndicatorSparklines(state.sparklineNow, state.indicatorSeries);
   }
 
   window.addEventListener("nm:layout-change", resizeCharts);

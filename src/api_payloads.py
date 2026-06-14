@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
+from src.indicator_series import compute_indicator_series
 from src.metrics import (
     BLOCKS_BUCKET_SECONDS,
     NOW_WINDOW_SECONDS,
@@ -20,7 +21,7 @@ from src.metrics import (
     sort_samples_by_ts,
 )
 from src.ping_monitor import PingMonitor
-from src.sample_utils import ceil_div
+from src.sample_utils import ceil_div, filter_samples_since
 
 
 def trend_window_minutes() -> int:
@@ -33,7 +34,7 @@ def now_window_minutes() -> int:
 
 def filter_samples(samples: list[dict], window_minutes: int) -> list[dict]:
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
-    return [sample for sample in samples if parse_ts(sample["ts"]) >= cutoff]
+    return filter_samples_since(samples, cutoff)
 
 
 def build_now_payload(
@@ -75,13 +76,23 @@ def build_now_payload(
     }
 
 
+def _indicator_series_for_samples(recent_samples: list[dict], now_payload: dict) -> dict:
+    return compute_indicator_series(
+        recent_samples,
+        spike_threshold_ms=now_payload.get("spike_threshold_ms"),
+    )
+
+
 def build_live_payload(monitor: PingMonitor, stabilizer: VerdictStabilizer) -> dict:
     trend_samples = monitor.get_samples(trend_window_minutes())
     latest = monitor.get_latest_sample()
+    now_payload = build_now_payload(trend_samples, stabilizer)
+    recent_samples = monitor.get_recent_samples(60)
     return {
         "latest_ts": latest["ts"] if latest else None,
-        "recent_samples": monitor.get_recent_samples(60),
-        "now": build_now_payload(trend_samples, stabilizer),
+        "recent_samples": recent_samples,
+        "indicator_series": _indicator_series_for_samples(recent_samples, now_payload),
+        "now": now_payload,
     }
 
 
@@ -100,16 +111,19 @@ def build_metrics_payload(
 
     stats = compute_stats(samples)
     chart_samples = downsample_samples(samples, window_minutes=window)
+    recent_samples = monitor.get_recent_samples(60)
+    now_payload = build_now_payload(trend_samples, stabilizer)
 
     return {
         "window_minutes": window,
         "latest_ts": samples[-1]["ts"] if samples else None,
         "samples": chart_samples,
-        "recent_samples": monitor.get_recent_samples(60),
+        "recent_samples": recent_samples,
+        "indicator_series": _indicator_series_for_samples(recent_samples, now_payload),
         "sample_count_raw": len(samples),
         "stats": stats,
         "health": compute_health(stats),
-        "now": build_now_payload(trend_samples, stabilizer),
+        "now": now_payload,
         "outages": detect_outages(samples),
         "blocks": {
             "window_minutes": window,
