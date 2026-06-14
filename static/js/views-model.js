@@ -1,7 +1,7 @@
 /* ---------- dashboard views data model ---------- */
 
 const ViewsModel = (() => {
-  const BUILTIN_VIEWS = ["default", "analytics"];
+  const BUILTIN_VIEWS = ["default"];
   const MAX_CUSTOM_VIEWS = 20;
 
   const STORAGE_KEYS = {
@@ -81,34 +81,34 @@ const ViewsModel = (() => {
 
   const LAYOUT_DEFAULTS = {
     default: {
-      hero: { w: 8, order: 0, size: "default" },
-      status: { w: 4, order: 1, size: "default" },
-      indicators: { w: 12, order: 2, size: "default" },
-      live: { w: 7, order: 3, size: "default" },
-      narrative: { w: 5, order: 4, size: "default" },
-      stats: { w: 12, order: 5, size: "default" },
-      latency: { w: 8, order: 6, size: "default" },
-      distribution: { w: 4, order: 7, size: "default" },
-      jitter: { w: 6, order: 8, size: "default" },
-      loss: { w: 6, order: 9, size: "default" },
-      "quality-timeline": { w: 12, order: 10, size: "default" },
-      outages: { w: 6, order: 11, size: "default" },
-      recent: { w: 6, order: 12, size: "default" },
+      hero: { w: 8, order: 0 },
+      status: { w: 4, order: 1 },
+      indicators: { w: 12, order: 2 },
+      live: { w: 7, order: 3 },
+      narrative: { w: 5, order: 4 },
+      stats: { w: 12, order: 5 },
+      latency: { w: 8, order: 6 },
+      distribution: { w: 4, order: 7 },
+      jitter: { w: 6, order: 8 },
+      loss: { w: 6, order: 9 },
+      "quality-timeline": { w: 12, order: 10 },
+      outages: { w: 6, order: 11 },
+      recent: { w: 6, order: 12 },
     },
     analytics: {
-      hero: { w: 12, order: 0, size: "default" },
-      status: { w: 12, order: 1, size: "default" },
-      indicators: { w: 12, order: 2, size: "default" },
-      live: { w: 12, order: 3, size: "default" },
-      narrative: { w: 12, order: 4, size: "default" },
-      stats: { w: 12, order: 5, size: "default" },
-      latency: { w: 12, order: 6, size: "default" },
-      distribution: { w: 6, order: 7, size: "default" },
-      jitter: { w: 6, order: 8, size: "default" },
-      loss: { w: 6, order: 9, size: "default" },
-      "quality-timeline": { w: 12, order: 10, size: "default" },
-      outages: { w: 6, order: 11, size: "default" },
-      recent: { w: 6, order: 12, size: "default" },
+      hero: { w: 12, order: 0 },
+      status: { w: 12, order: 1 },
+      indicators: { w: 12, order: 2 },
+      live: { w: 12, order: 3 },
+      narrative: { w: 12, order: 4 },
+      stats: { w: 12, order: 5 },
+      latency: { w: 12, order: 6 },
+      distribution: { w: 6, order: 7 },
+      jitter: { w: 6, order: 8 },
+      loss: { w: 6, order: 9 },
+      "quality-timeline": { w: 12, order: 10 },
+      outages: { w: 6, order: 11 },
+      recent: { w: 6, order: 12 },
     },
   };
 
@@ -245,8 +245,8 @@ const ViewsModel = (() => {
       currentView = saved;
     } else {
       currentView = "default";
-      localStorage.setItem(STORAGE_KEYS.dashboardView, currentView);
     }
+    localStorage.setItem(STORAGE_KEYS.dashboardView, currentView);
   }
 
   function setCurrentView(viewId) {
@@ -287,7 +287,7 @@ const ViewsModel = (() => {
     const defaults = getLayoutDefaultsForView(viewId);
     const overrides = { ...getPanelLayoutOverrides(viewId) };
     const merged = { ...defaults[panelId], ...item };
-    const isDefault = ["w", "order", "size"].every(
+    const isDefault = ["w", "order"].every(
       (key) => merged[key] === defaults[panelId]?.[key],
     );
     if (isDefault) {
@@ -314,7 +314,7 @@ const ViewsModel = (() => {
     for (const { id } of PANEL_DEFS) {
       const item = layoutMap[id];
       if (!item) continue;
-      const isDefault = ["w", "order", "size"].every(
+      const isDefault = ["w", "order"].every(
         (key) => item[key] === defaults[id]?.[key],
       );
       if (!isDefault) overrides[id] = { ...item };

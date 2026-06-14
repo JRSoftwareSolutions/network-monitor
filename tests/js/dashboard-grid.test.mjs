@@ -2,15 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { loadDashboardGridGlobals } from "./load-globals.mjs";
 
-test("normalizeLayoutItem clamps width and preserves size preset", () => {
+test("normalizeLayoutItem clamps width and preserves order", () => {
   const { DashboardGrid } = loadDashboardGridGlobals();
   const item = DashboardGrid.normalizeLayoutItem("hero", {
     w: 20,
     order: 0,
-    size: "tall",
   });
   assert.equal(item.w, 12);
-  assert.equal(item.size, "tall");
+  assert.equal(item.order, 0);
+  assert.equal(item.size, undefined);
 });
 
 test("normalizeLayoutItem forces single column below breakpoint", () => {
@@ -18,7 +18,6 @@ test("normalizeLayoutItem forces single column below breakpoint", () => {
   const item = DashboardGrid.normalizeLayoutItem("outages", {
     w: 6,
     order: 11,
-    size: "default",
   });
   assert.equal(item.w, 12);
 });
@@ -32,16 +31,6 @@ test("normalizeLayoutMap fills all default panels", () => {
   assert.ok(map.recent);
 });
 
-test("normalizeLayoutItem rejects invalid size values", () => {
-  const { DashboardGrid } = loadDashboardGridGlobals();
-  const item = DashboardGrid.normalizeLayoutItem("status", {
-    w: 6,
-    order: 1,
-    size: "huge",
-  });
-  assert.equal(item.size, "default");
-});
-
 test("normalizeLayoutItem migrates legacy GridStack records", () => {
   const { DashboardGrid } = loadDashboardGridGlobals();
   const item = DashboardGrid.normalizeLayoutItem("latency", {
@@ -49,8 +38,9 @@ test("normalizeLayoutItem migrates legacy GridStack records", () => {
     y: 11,
     w: 8,
     h: 4,
-    size: "default",
+    size: "tall",
   });
   assert.equal(item.w, 8);
   assert.equal(item.order, 1100);
+  assert.equal(item.size, undefined);
 });

@@ -3,23 +3,22 @@
 const DashboardGrid = (() => {
   const GRID_COLUMNS = 12;
   const SINGLE_COLUMN_BREAKPOINT = 832;
-  const VALID_SIZES = new Set(["compact", "default", "tall"]);
   const WIDTH_OPTIONS = [12, 8, 7, 6, 5, 4, 3];
 
   const GRID_PANEL_META = {
-    hero: { minW: 6, maxW: 12, allowedSizes: ["compact", "default", "tall"] },
-    status: { minW: 4, maxW: 12, allowedSizes: ["compact", "default"] },
-    indicators: { minW: 6, maxW: 12, allowedSizes: ["compact", "default", "tall"] },
-    live: { minW: 6, maxW: 12, allowedSizes: ["compact", "default", "tall"] },
-    narrative: { minW: 4, maxW: 12, allowedSizes: ["compact", "default"] },
-    stats: { minW: 6, maxW: 12, allowedSizes: ["compact", "default"] },
-    latency: { minW: 4, maxW: 12, allowedSizes: ["compact", "default", "tall"] },
-    distribution: { minW: 3, maxW: 8, allowedSizes: ["compact", "default", "tall"] },
-    jitter: { minW: 3, maxW: 12, allowedSizes: ["compact", "default", "tall"] },
-    loss: { minW: 3, maxW: 12, allowedSizes: ["compact", "default", "tall"] },
-    "quality-timeline": { minW: 6, maxW: 12, allowedSizes: ["compact", "default", "tall"] },
-    outages: { minW: 4, maxW: 12, allowedSizes: ["compact", "default", "tall"] },
-    recent: { minW: 4, maxW: 12, allowedSizes: ["compact", "default", "tall"] },
+    hero: { minW: 6, maxW: 12 },
+    status: { minW: 4, maxW: 12 },
+    indicators: { minW: 6, maxW: 12 },
+    live: { minW: 6, maxW: 12 },
+    narrative: { minW: 4, maxW: 12 },
+    stats: { minW: 6, maxW: 12 },
+    latency: { minW: 4, maxW: 12 },
+    distribution: { minW: 3, maxW: 8 },
+    jitter: { minW: 3, maxW: 12 },
+    loss: { minW: 3, maxW: 12 },
+    "quality-timeline": { minW: 6, maxW: 12 },
+    outages: { minW: 4, maxW: 12 },
+    recent: { minW: 4, maxW: 12 },
   };
 
   const PANEL_ORDER = ViewsModel.PANEL_DEFS.map((p) => p.id);
@@ -40,21 +39,10 @@ const DashboardGrid = (() => {
   }
 
   function getMeta(panelId) {
-    return GRID_PANEL_META[panelId] ?? { minW: 3, maxW: 12, allowedSizes: ["default"] };
+    return GRID_PANEL_META[panelId] ?? { minW: 3, maxW: 12 };
   }
 
-  function normalizeSize(size, panelId) {
-    const meta = getMeta(panelId);
-    if (VALID_SIZES.has(size) && meta.allowedSizes.includes(size)) return size;
-    return "default";
-  }
-
-  function defaultOrder(panelId) {
-    const index = PANEL_ORDER.indexOf(panelId);
-    return index >= 0 ? index : 0;
-  }
-
-  /** Migrate legacy GridStack { x, y, w, h } records to { w, order, size }. */
+  /** Migrate legacy GridStack { x, y, w, h } records to { w, order }. */
   function migrateLayoutItem(panelId, item = {}, rawItem = {}) {
     const isLegacy = rawItem.x != null || rawItem.y != null || rawItem.h != null;
     if (!isLegacy && item.order != null && item.w != null) {
@@ -66,8 +54,12 @@ const DashboardGrid = (() => {
     return {
       w: item.w,
       order,
-      size: item.size,
     };
+  }
+
+  function defaultOrder(panelId) {
+    const index = PANEL_ORDER.indexOf(panelId);
+    return index >= 0 ? index : 0;
   }
 
   function normalizeLayoutItem(panelId, item = {}) {
@@ -82,7 +74,6 @@ const DashboardGrid = (() => {
     return {
       w,
       order: Number.isFinite(source.order) ? source.order : defaultOrder(panelId),
-      size: normalizeSize(source.size ?? defaults.size ?? "default", panelId),
     };
   }
 
@@ -116,8 +107,6 @@ const DashboardGrid = (() => {
     clearSpanClasses(el);
     el.classList.add(spanClass(item.w));
     el.style.order = String(item.order);
-    el.setAttribute("data-panel-size", item.size);
-    el.dataset.panelSize = item.size;
   }
 
   function readLayoutFromDom() {
@@ -130,7 +119,6 @@ const DashboardGrid = (() => {
       layout[panelId] = normalizeLayoutItem(panelId, {
         w,
         order: Number(el.style.order) || defaultOrder(panelId),
-        size: el.getAttribute("data-panel-size") || "default",
       });
     }
     return layout;
@@ -205,19 +193,6 @@ const DashboardGrid = (() => {
     applyPanelLayout(el, item);
     ViewsModel.setPanelLayout(ViewsModel.currentView, selectedPanelId, item);
     syncWidthButtons();
-    scheduleLayoutChange();
-  }
-
-  function setSelectedPanelSize(size) {
-    if (!selectedPanelId) return;
-    const el = panelElement(selectedPanelId);
-    if (!el) return;
-    const item = normalizeLayoutItem(selectedPanelId, {
-      ...readLayoutFromDom()[selectedPanelId],
-      size,
-    });
-    applyPanelLayout(el, item);
-    ViewsModel.setPanelLayout(ViewsModel.currentView, selectedPanelId, item);
     scheduleLayoutChange();
   }
 
@@ -354,7 +329,6 @@ const DashboardGrid = (() => {
     selectPanel,
     getSelectedPanel: () => selectedPanelId,
     setSelectedPanelWidth,
-    setSelectedPanelSize,
     onLayoutChange,
     readLayoutFromDom,
     init,
