@@ -32,8 +32,8 @@ window.DashboardCharts = (() => {
       type: "line",
       data: { datasets: [
         { label: "latency", data: [], borderColor: COLORS.good, backgroundColor: "rgba(78,200,255,0.10)",
-          borderWidth: 2, pointRadius: 0, tension: 0.25, fill: true, spanGaps: false },
-        { label: "baseline", data: [], borderColor: COLORS.none, borderWidth: 1.3, borderDash: [5, 5],
+          borderWidth: 1, pointRadius: 0, tension: 0.25, fill: true, spanGaps: false },
+        { label: "baseline", data: [], borderColor: COLORS.none, borderWidth: 0.8, borderDash: [5, 5],
           pointRadius: 0, fill: false, spanGaps: true },
       ] },
       options: {
@@ -50,7 +50,7 @@ window.DashboardCharts = (() => {
     charts.jitter = new Chart($("jitter-chart"), {
       type: "line",
       data: { datasets: [{ label: "jitter", data: [], borderColor: COLORS.okay,
-        backgroundColor: "rgba(255,200,97,0.12)", borderWidth: 2, pointRadius: 0, tension: 0.25, fill: true, spanGaps: false }] },
+        backgroundColor: "rgba(255,200,97,0.12)", borderWidth: 1, pointRadius: 0, tension: 0.25, fill: true, spanGaps: false }] },
       options: {
         responsive: true, maintainAspectRatio: false,
         interaction: { intersect: false, mode: "index" },
@@ -186,9 +186,16 @@ window.DashboardCharts = (() => {
     }
   }
 
+  function redrawCharts() {
+    for (const chart of Object.values(charts)) {
+      chart?.update("none");
+    }
+  }
+
   return {
     initCharts,
     updateCharts,
     resizeCharts,
+    redrawCharts,
   };
 })();

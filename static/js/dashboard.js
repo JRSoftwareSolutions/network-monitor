@@ -32,6 +32,7 @@
     sparklineNow: null,
     indicatorSeries: null,
     heartbeatSamples: [],
+    lastGraphPayload: null,
   };
 
   DR.bindState(state);
@@ -64,6 +65,7 @@
   }
 
   function renderGraphSections(payload) {
+    state.lastGraphPayload = payload;
     const windowMins = payload.window_minutes ?? state.windowMinutes;
     setText("window-label", String(windowMins));
     DR.renderStats(payload.stats);
@@ -156,7 +158,8 @@
     clearTimeout(state.pollTimer);
     poll(true).finally(() => {
       schedulePoll();
-      resizeCharts();
+      refreshCharts();
+      requestAnimationFrame(refreshCharts);
     });
   }
 
@@ -294,12 +297,21 @@
     });
   }
 
-  function resizeCharts() {
+  function refreshCharts() {
     DC.resizeCharts();
+    if (state.lastGraphPayload) {
+      DC.updateCharts(state.lastGraphPayload);
+    } else {
+      DC.redrawCharts();
+    }
     DR.updateIndicatorSparklines(state.sparklineNow, state.indicatorSeries);
   }
 
-  window.addEventListener("nm:layout-change", resizeCharts);
+  function resizeCharts() {
+    refreshCharts();
+  }
+
+  window.addEventListener("nm:layout-change", refreshCharts);
 
   async function bootstrap() {
     if (window.ViewBuilder) {

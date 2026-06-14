@@ -17,7 +17,7 @@ window.DashboardSparkline = (() => {
     ctx.clearRect(0, 0, width, height);
 
     const valid = values.filter((v) => v != null && !Number.isNaN(v));
-    const lineWidth = 1.6;
+    const lineWidth = 1;
     const padBottom = Math.max(2, height * 0.1);
     const padTop = Math.max(lineWidth + 2, height * 0.18);
     const plotH = Math.max(1, height - padTop - padBottom);
