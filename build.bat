@@ -28,6 +28,31 @@ if errorlevel 1 (
     exit /b 1
 )
 
+where node >nul 2>&1
+if errorlevel 1 (
+    echo Node.js not found — cannot build dashboard CSS. Install Node.js and retry.
+    pause
+    exit /b 1
+)
+
+if not exist "node_modules\" (
+    echo Installing Node dependencies...
+    call npm install --no-audit --no-fund
+    if errorlevel 1 (
+        echo Failed to install Node dependencies.
+        pause
+        exit /b 1
+    )
+)
+
+echo Building dashboard CSS...
+call npm run build:css
+if errorlevel 1 (
+    echo CSS build failed.
+    pause
+    exit /b 1
+)
+
 echo Building NetworkMonitor.exe...
 ".venv\Scripts\python.exe" -m PyInstaller network_monitor.spec --noconfirm
 if errorlevel 1 (

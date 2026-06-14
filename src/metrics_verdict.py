@@ -1,7 +1,7 @@
-﻿import threading
+import threading
 from datetime import datetime, timedelta, timezone
 
-from src.metrics_time import _median, _parse_ts, _percentile
+from src.metrics_time import median, parse_ts, percentile
 
 
 _HEALTH_LABELS = {
@@ -61,7 +61,7 @@ _GAMING_LABELS = {
     "great": "Great for gaming",
     "good": "Good to game",
     "okay": "Playable, expect hiccups",
-    "bad": "Rough â€” expect lag",
+    "bad": "Rough - expect lag",
     "offline": "Offline",
     "no_data": "No data",
 }
@@ -74,10 +74,10 @@ def compute_now_stats(
     now: datetime | None = None,
     window_seconds: int = NOW_WINDOW_SECONDS,
 ) -> dict:
-    """Stats over the trailing `window_seconds` â€” the 'can I game right now?' window."""
+    """Stats over the trailing `window_seconds` - the 'can I game right now?' window."""
     now_dt = now or datetime.now(timezone.utc)
     cutoff = now_dt - timedelta(seconds=window_seconds)
-    recent = [sample for sample in samples if _parse_ts(sample["ts"]) >= cutoff]
+    recent = [sample for sample in samples if parse_ts(sample["ts"]) >= cutoff]
 
     total = len(recent)
     failed = sum(1 for sample in recent if not sample.get("success"))
@@ -97,7 +97,7 @@ def compute_now_stats(
     seconds_since_success: float | None = None
     for sample in reversed(recent):
         if sample.get("success"):
-            seconds_since_success = max(0.0, (now_dt - _parse_ts(sample["ts"])).total_seconds())
+            seconds_since_success = max(0.0, (now_dt - parse_ts(sample["ts"])).total_seconds())
             break
 
     latest = recent[-1] if recent else None
@@ -128,7 +128,7 @@ def _rate_scale(value: float, great: float, good: float, okay: float) -> str:
     return "bad"
 
 
-def _rate_loss_pct(loss_pct: float) -> str:
+def rate_loss_pct(loss_pct: float) -> str:
     if loss_pct <= 0:
         return "great"
     if loss_pct < 1:
@@ -138,7 +138,7 @@ def _rate_loss_pct(loss_pct: float) -> str:
     return "bad"
 
 
-def _rate_spike_rate(rate_per_min: float) -> str:
+def rate_spike_rate(rate_per_min: float) -> str:
     if rate_per_min <= 0:
         return "great"
     if rate_per_min < 1:
@@ -196,17 +196,17 @@ def compute_baseline_and_spikes(
         for sample in samples
         if sample.get("success")
         and sample.get("latency_ms") is not None
-        and _parse_ts(sample["ts"]) >= cutoff
+        and parse_ts(sample["ts"]) >= cutoff
     ]
 
     baseline_cutoff = now_dt - timedelta(seconds=baseline_seconds)
     baseline_pool = [
-        sample["latency_ms"] for sample in recent if _parse_ts(sample["ts"]) >= baseline_cutoff
+        sample["latency_ms"] for sample in recent if parse_ts(sample["ts"]) >= baseline_cutoff
     ]
     if len(baseline_pool) < MIN_BASELINE_SAMPLES:
         baseline_pool = [sample["latency_ms"] for sample in recent]
 
-    baseline_ms = round(_median(baseline_pool), 1) if baseline_pool else None
+    baseline_ms = round(median(baseline_pool), 1) if baseline_pool else None
 
     spike_threshold_ms = None
     spikes: list[dict] = []
@@ -226,7 +226,7 @@ def compute_baseline_and_spikes(
 
     p95_vs_baseline = None
     if baseline_ms and recent:
-        p95 = _percentile([sample["latency_ms"] for sample in recent], 95)
+        p95 = percentile([sample["latency_ms"] for sample in recent], 95)
         p95_vs_baseline = round(p95 / baseline_ms, 2)
 
     return {
@@ -279,7 +279,7 @@ def compute_instant_verdict(now_stats: dict, flow: dict) -> dict:
         }
 
     loss_pct = now_stats.get("loss_pct", 0.0)
-    loss_level = _rate_loss_pct(loss_pct)
+    loss_level = rate_loss_pct(loss_pct)
     indicators["loss"] = {
         "level": loss_level,
         "value": loss_pct,
@@ -289,7 +289,7 @@ def compute_instant_verdict(now_stats: dict, flow: dict) -> dict:
 
     spike_rate = flow.get("spike_rate_per_min") or 0.0
     spike_count = flow.get("spike_count", 0)
-    spike_level = _rate_spike_rate(spike_rate)
+    spike_level = rate_spike_rate(spike_rate)
     worst_spike = flow.get("worst_spike")
     if spike_count and worst_spike is not None:
         plural = "s" if spike_count != 1 else ""

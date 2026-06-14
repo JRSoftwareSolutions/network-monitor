@@ -4,334 +4,418 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Network Monitor</title>
-  <link id="favicon" rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%230a101c'/%3E%3Cpath d='M6 20c4-6 8-9 10-9s6 3 10 9' stroke='%233de8ff' stroke-width='2.5' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='22' r='2.5' fill='%238fa3c2'/%3E%3C/svg%3E">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23070b14'/%3E%3Cpath d='M5 21c4-7 9-10 11-10s7 3 11 10' stroke='%2334e2a0' stroke-width='2.6' fill='none' stroke-linecap='round'/%3E%3Ccircle cx='16' cy='23' r='2.6' fill='%234ec8ff'/%3E%3C/svg%3E">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/layers.css">
-  <link rel="stylesheet" href="/static/css/tokens.css">
-  <link rel="stylesheet" href="/static/css/base.css">
-  <link rel="stylesheet" href="/static/css/primitives.css">
-  <link rel="stylesheet" href="/static/css/components-shell.css">
-  <link rel="stylesheet" href="/static/css/components-tiles.css">
-  <link rel="stylesheet" href="/static/css/components-data.css">
-  <link rel="stylesheet" href="/static/css/view-builder.css">
-  <link rel="stylesheet" href="/static/css/overrides.css">
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/dashboard.css?v=4">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-financial@0.2.1/dist/chartjs-chart-financial.min.js"></script>
 </head>
 <body data-level="no_data">
-  <div class="bg-glow" aria-hidden="true"></div>
-  <div class="bg-status" aria-hidden="true"></div>
-  <div class="bg-grid" aria-hidden="true"></div>
+  <div class="app">
 
-  <header class="topbar">
-    <div class="topbar-inner">
+    <!-- ============ top bar ============ -->
+    <header class="topbar">
       <div class="brand">
-        <svg class="brand-mark" viewBox="0 0 32 32" width="36" height="36" aria-hidden="true">
-          <rect x="0.5" y="0.5" width="31" height="31" rx="9" fill="rgba(61, 232, 255, 0.07)" stroke="rgba(61, 232, 255, 0.35)"/>
-          <path d="M6 20c4-6 8-9 10-9s6 3 10 9" stroke="#3de8ff" stroke-width="2.4" fill="none" stroke-linecap="round"/>
-          <circle cx="16" cy="22" r="2.6" fill="#3dffa2"/>
-        </svg>
-        <div class="brand-text">
+        <span class="brand-mark">
+          <svg viewBox="0 0 32 32" width="24" height="24" aria-hidden="true">
+            <path d="M5 21c4-7 9-10 11-10s7 3 11 10" stroke="var(--accent)" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+            <circle cx="16" cy="23" r="2.6" fill="var(--ink)"/>
+          </svg>
+        </span>
+        <div>
           <h1>Network Monitor</h1>
           <p class="brand-sub">
-            <span id="connection-label">—</span>
-            <span class="brand-sep" aria-hidden="true">·</span>
-            target <span class="mono" id="target-label">—</span>
+            <span id="connection-label">-</span>
+            <span class="dot" aria-hidden="true"></span>
+            target <b class="mono" id="target-label">-</b>
           </p>
         </div>
       </div>
+
+      <div class="topbar-spacer"></div>
+
       <div class="controls">
-        <label for="view-select">View</label>
-        <select id="view-select" aria-label="Dashboard view"></select>
-        <button id="layout-toggle" class="layout-toggle" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="layout-dialog">
-          <svg class="layout-toggle-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+        <label class="field">
+          <span>View</span>
+          <select id="view-select" aria-label="Dashboard view"></select>
+        </label>
+        <button class="btn btn-icon" id="layout-toggle" type="button" aria-haspopup="dialog" aria-expanded="false" aria-controls="layout-dialog">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
             <rect x="1.5" y="2" width="5" height="4.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/>
             <rect x="9.5" y="2" width="5" height="4.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/>
             <rect x="1.5" y="9.5" width="5" height="4.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/>
             <rect x="9.5" y="9.5" width="5" height="4.5" rx="1" fill="none" stroke="currentColor" stroke-width="1.3"/>
           </svg>
-          <span class="layout-toggle-label">Layout</span>
+          Layout
         </button>
-        <span id="status-indicator" class="status">
-          <span class="status-dot" aria-hidden="true"></span>
-          <span id="status-text">Connecting…</span>
+        <span class="pill" id="status-pill" data-state="waiting">
+          <span class="live-dot" aria-hidden="true"></span>
+          <span id="status-text">Connecting...</span>
         </span>
-        <span id="updated-indicator" class="updated-indicator">—</span>
-        <label for="window-select">Window</label>
-        <select id="window-select"></select>
-        <label for="screenshot-range">Capture</label>
-        <select id="screenshot-range" aria-label="Screenshot area">
-          <option value="viewport">Viewport</option>
-          <option value="full">Full page</option>
-        </select>
-        <button id="screenshot-btn" class="fill-toggle" type="button" aria-label="Screenshot dashboard to clipboard">
-          <svg class="fill-toggle-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
-            <path d="M2.5 5.5h1.2l1-1.5h6.6l1 1.5h1.2a1.5 1.5 0 0 1 1.5 1.5v5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 1 12V7a1.5 1.5 0 0 1 1.5-1.5Z"
-                  fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"/>
-            <circle cx="8" cy="9" r="2.2" fill="none" stroke="currentColor" stroke-width="1.4"/>
-          </svg>
-          <span class="fill-toggle-label">Screenshot</span>
-        </button>
-        <button id="settings-toggle" class="settings-toggle" type="button" aria-haspopup="dialog" aria-expanded="false">
-          <svg class="settings-toggle-icon" viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+        <span class="pill mono" id="updated-pill" title="Time since last update">-</span>
+        <label class="field">
+          <span>Window</span>
+          <select id="window-select" aria-label="Time window"></select>
+        </label>
+        <button class="btn btn-icon" id="settings-btn" type="button" aria-haspopup="dialog">
+          <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
             <circle cx="8" cy="8" r="2.6" fill="none" stroke="currentColor" stroke-width="1.5"/>
-            <path d="M8 1.6v2.1M8 12.3v2.1M1.6 8h2.1M12.3 8h2.1M3.5 3.5l1.5 1.5M11 11l1.5 1.5M12.5 3.5L11 5M5 11l-1.5 1.5"
-                  fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            <path d="M8 1.6v2.1M8 12.3v2.1M1.6 8h2.1M12.3 8h2.1M3.5 3.5l1.5 1.5M11 11l1.5 1.5M12.5 3.5L11 5M5 11l-1.5 1.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
           Settings
         </button>
       </div>
+    </header>
+
+    <!-- ============ dashboard grid ============ -->
+    <div id="dashboard-grid" class="grid">
+
+      <div class="dashboard-panel span-8" data-panel="hero" data-panel-size="default">
+        <section class="card hero">
+            <div class="hero-main">
+              <span class="hero-kicker"><span class="kdot" aria-hidden="true"></span><span id="verdict-kicker">connection status</span></span>
+              <h2 class="verdict" id="verdict-label">No data</h2>
+              <p class="verdict-sub" id="verdict-sub">Waiting for the first pings to arrive...</p>
+              <div class="hero-tags" id="hero-tags">
+                <span class="tag">baseline <span class="mono" id="tag-baseline">-</span></span>
+                <span class="tag">jitter <span class="mono" id="tag-jitter">-</span></span>
+                <span class="tag">loss <span class="mono" id="tag-loss">-</span></span>
+                <span class="tag is-info">verdict is damped - single pings can't flip it</span>
+              </div>
+            </div>
+            <div class="gauge">
+              <div class="gauge-arc">
+                <svg viewBox="0 0 220 130" aria-hidden="true">
+                  <path class="arc-track" d="M 16 116 A 94 94 0 0 1 204 116"/>
+                  <path class="arc-val" id="gauge-arc" d="M 16 116 A 94 94 0 0 1 204 116" stroke-dasharray="295.3" stroke-dashoffset="295.3"/>
+                </svg>
+                <div class="gauge-center">
+                  <span class="gauge-value mono" id="gauge-value">-</span>
+                  <span class="gauge-unit">ms baseline</span>
+                </div>
+              </div>
+              <p class="gauge-caption">60s median ping - single spikes can't move it</p>
+              <span class="trend" id="trend" data-dir="unknown">
+                <span class="arrow" aria-hidden="true">→</span>
+                <span id="trend-label">trend pending</span>
+              </span>
+            </div>
+          </section>
+      </div>
+
+      <div class="dashboard-panel span-4" data-panel="status" data-panel-size="default">
+        <section class="card">
+            <div class="card-head">
+              <div>
+                <h2>Current status</h2>
+                <p id="status-headline">Waiting for data</p>
+              </div>
+            </div>
+            <dl class="status-metrics" id="status-metrics">
+              <div class="status-row" data-metric="ping"><span class="label">Baseline ping</span><span class="val mono" id="sm-ping">-</span><span class="note" id="sm-ping-note">-</span></div>
+              <div class="status-row" data-metric="jitter"><span class="label">Jitter</span><span class="val mono" id="sm-jitter">-</span><span class="note" id="sm-jitter-note">-</span></div>
+              <div class="status-row" data-metric="loss"><span class="label">Packet loss</span><span class="val mono" id="sm-loss">-</span><span class="note" id="sm-loss-note">-</span></div>
+              <div class="status-row" data-metric="spikes"><span class="label">Spike rate</span><span class="val mono" id="sm-spikes">-</span><span class="note" id="sm-spikes-note">-</span></div>
+            </dl>
+          </section>
+      </div>
+
+      <div class="dashboard-panel span-12" data-panel="indicators" data-panel-size="default">
+          <p class="section-title">Live quality · last 2 minutes</p>
+          <div class="indicators">
+            <article class="indicator" id="ind-ping" data-rating="none">
+              <div class="ind-head"><h3>Ping</h3><span class="ind-badge" data-role="badge">-</span></div>
+              <p class="ind-value"><span class="num mono" data-role="value">-</span><span class="unit">ms</span></p>
+              <p class="ind-meaning" data-role="meaning">waiting for data...</p>
+              <div class="ind-scale"><span class="ind-marker" data-role="marker"></span></div>
+              <p class="ind-sub">baseline · median of last 60s</p>
+            </article>
+            <article class="indicator" id="ind-jitter" data-rating="none">
+              <div class="ind-head"><h3>Jitter</h3><span class="ind-badge" data-role="badge">-</span></div>
+              <p class="ind-value"><span class="num mono" data-role="value">-</span><span class="unit">ms</span></p>
+              <p class="ind-meaning" data-role="meaning">waiting for data...</p>
+              <div class="ind-scale"><span class="ind-marker" data-role="marker"></span></div>
+              <p class="ind-sub">timing stability · last 2 min</p>
+            </article>
+            <article class="indicator" id="ind-loss" data-rating="none">
+              <div class="ind-head"><h3>Packet loss</h3><span class="ind-badge" data-role="badge">-</span></div>
+              <p class="ind-value"><span class="num mono" data-role="value">-</span><span class="unit">%</span></p>
+              <p class="ind-meaning" data-role="meaning">waiting for data...</p>
+              <div class="ind-scale"><span class="ind-marker" data-role="marker"></span></div>
+              <p class="ind-sub">failed pings · last 2 min</p>
+            </article>
+            <article class="indicator" id="ind-spikes" data-rating="none">
+              <div class="ind-head"><h3>Spike rate</h3><span class="ind-badge" data-role="badge">-</span></div>
+              <p class="ind-value"><span class="num mono" data-role="value">-</span><span class="unit">/min</span></p>
+              <p class="ind-meaning" data-role="meaning">waiting for data...</p>
+              <div class="ind-scale"><span class="ind-marker" data-role="marker"></span></div>
+              <p class="ind-sub" data-role="sub">spikes above rolling baseline</p>
+            </article>
+          </div>
+      </div>
+
+      <div class="dashboard-panel span-7" data-panel="live" data-panel-size="default">
+        <section class="card">
+            <div class="card-head">
+              <div>
+                <h2>Live feed</h2>
+                <p>Raw per-ping data - this row is allowed to jump. Newest on the right.</p>
+              </div>
+            </div>
+            <div class="live-grid">
+              <div class="live-ping">
+                <span class="live-label">last ping</span>
+                <p style="margin:4px 0 0"><span class="num mono" id="live-ping" data-rating="none">-</span> <span class="unit">ms</span></p>
+                <p class="sub mono" id="live-ping-time">-</p>
+              </div>
+              <div>
+                <div class="heartbeat" id="heartbeat" aria-hidden="true"></div>
+                <div class="hb-meta">
+                  <span>last 60 pings</span>
+                  <span class="legend">
+                    <span><i class="lg-great"></i>&lt;40</span>
+                    <span><i class="lg-good"></i>&lt;70</span>
+                    <span><i class="lg-okay"></i>&lt;110</span>
+                    <span><i class="lg-bad"></i>≥110</span>
+                    <span><i class="lg-fail"></i>fail</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </section>
+      </div>
+
+      <div class="dashboard-panel span-5" data-panel="narrative" data-panel-size="default">
+        <section class="card">
+            <div class="card-head"><div><h2>What's happening</h2><p>Plain-language read on the connection</p></div></div>
+            <div class="narrative" id="narrative"><p>Waiting for the first pings to come in...</p></div>
+          </section>
+      </div>
+
+      <div class="dashboard-panel span-12" data-panel="stats" data-panel-size="default">
+        <section class="card">
+            <div class="card-head">
+              <div><h2>Selected window</h2><p>Stability over the last <span id="window-label">-</span> minutes</p></div>
+              <span class="chip" id="health-chip" data-level="no_data"><span class="hdot"></span><span id="health-label">No data</span></span>
+            </div>
+            <div class="stats">
+              <div class="stat"><div class="k">Avg latency</div><div class="v" id="st-avg">-</div></div>
+              <div class="stat"><div class="k">Min</div><div class="v" id="st-min">-</div></div>
+              <div class="stat"><div class="k">Max</div><div class="v" id="st-max">-</div></div>
+              <div class="stat"><div class="k">P95</div><div class="v" id="st-p95">-</div></div>
+              <div class="stat"><div class="k">Avg jitter</div><div class="v" id="st-jitter">-</div></div>
+              <div class="stat"><div class="k">Packet loss</div><div class="v" id="st-loss">-</div></div>
+              <div class="stat"><div class="k">Uptime</div><div class="v" id="st-uptime">-</div></div>
+              <div class="stat"><div class="k">Samples</div><div class="v" id="st-samples">-</div></div>
+            </div>
+          </section>
+      </div>
+
+      <div class="dashboard-panel span-8" data-panel="latency" data-panel-size="default">
+        <section class="card">
+            <div class="card-head"><div><h2>Latency over time</h2><p>Per-ping round trip time - failed pings appear as gaps</p></div></div>
+            <div class="chart-wrap tall"><canvas id="latency-chart"></canvas></div>
+          </section>
+      </div>
+
+      <div class="dashboard-panel span-4" data-panel="distribution" data-panel-size="default">
+        <section class="card">
+            <div class="card-head"><div><h2>Latency distribution</h2><p>How pings spread across quality tiers</p></div></div>
+            <div class="chart-wrap tall"><canvas id="distribution-chart"></canvas></div>
+          </section>
+      </div>
+
+      <div class="dashboard-panel span-6" data-panel="jitter" data-panel-size="default">
+        <section class="card">
+            <div class="card-head"><div><h2>Jitter</h2><p>Timing variation between pings - lower is steadier</p></div></div>
+            <div class="chart-wrap short"><canvas id="jitter-chart"></canvas></div>
+          </section>
+      </div>
+
+      <div class="dashboard-panel span-6" data-panel="loss" data-panel-size="default">
+        <section class="card">
+            <div class="card-head"><div><h2>Packet loss per minute</h2><p>Share of failed pings in each minute bucket</p></div></div>
+            <div class="chart-wrap short"><canvas id="loss-chart"></canvas></div>
+          </section>
+      </div>
+
+      <div class="dashboard-panel span-12" data-panel="quality-timeline" data-panel-size="default">
+        <section class="card">
+            <div class="card-head"><div><h2>Connection quality timeline</h2><p>Each cell = 1 minute · green good · amber fair · red poor</p></div></div>
+            <div class="timeline" id="quality-timeline"></div>
+            <div class="chart-wrap short"><canvas id="blocks-chart"></canvas></div>
+          </section>
+      </div>
+
+      <div class="dashboard-panel span-6" data-panel="outages" data-panel-size="default">
+        <section class="card">
+            <div class="card-head"><div><h2>Outages</h2><p>Stretches where pings failed in this window</p></div></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Start</th><th>End</th><th class="num">Duration</th><th class="num">Failed</th><th>Status</th></tr></thead>
+                <tbody id="outages-table"><tr><td colspan="5" class="empty">No outages in this window</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+      </div>
+
+      <div class="dashboard-panel span-6" data-panel="recent" data-panel-size="default">
+        <section class="card">
+            <div class="card-head"><div><h2>Recent samples</h2><p>Latest pings, newest first</p></div></div>
+            <div class="table-wrap">
+              <table>
+                <thead><tr><th>Time</th><th class="num">Latency</th><th class="num">Jitter</th><th>Status</th></tr></thead>
+                <tbody id="recent-table"><tr><td colspan="4" class="empty">Waiting for data...</td></tr></tbody>
+              </table>
+            </div>
+          </section>
+      </div>
+
     </div>
-  </header>
+  </div>
 
-  <main>
-    <!-- ====== 1 · stabilized verdict banner ====== -->
-    <section class="hero" id="hero" data-panel="hero" data-level="no_data" role="status" aria-live="polite">
-      <div class="hero-sweep" aria-hidden="true"></div>
-      <div class="hero-verdict">
-        <span class="hero-kicker" id="hero-kicker"><span class="kicker-dot" aria-hidden="true"></span><span class="hero-kicker-text" id="hero-kicker-text">connection status</span></span>
-        <h2 class="verdict-label" id="verdict-label">No data</h2>
-        <p class="verdict-detail" id="verdict-detail-live">
-          <span class="verdict-detail-line mono">
-            <span class="verdict-detail-label">baseline</span>
-            <span class="verdict-detail-value dyn-slot dyn-slot--ms" id="verdict-baseline">—</span>
-            <span class="verdict-detail-sep" aria-hidden="true">·</span>
-            <span class="verdict-detail-label">jitter</span>
-            <span class="verdict-detail-value dyn-slot dyn-slot--ms-dec" id="verdict-jitter">—</span>
-            <span class="verdict-detail-sep" aria-hidden="true">·</span>
-            <span class="verdict-detail-label">loss</span>
-            <span class="verdict-detail-value dyn-slot dyn-slot--pct" id="verdict-loss">—</span>
-          </span>
+  <!-- ============ layout edit bar (visible during grid customize) ============ -->
+  <div id="layout-edit-bar" class="layout-edit-bar" hidden>
+    <span class="layout-edit-bar__hint">Click a panel to select · drag to reorder · pick a width</span>
+    <div id="layout-edit-width-presets" class="layout-width-presets">
+      <span class="layout-size-presets__label">Width</span>
+      <button type="button" class="layout-width-btn" data-width="12" title="Full row">12</button>
+      <button type="button" class="layout-width-btn" data-width="8" title="Two thirds">8</button>
+      <button type="button" class="layout-width-btn" data-width="6" title="Half">6</button>
+      <button type="button" class="layout-width-btn" data-width="4" title="Third">4</button>
+    </div>
+    <div id="layout-edit-size-presets" class="layout-size-presets">
+      <span class="layout-size-presets__label">Height</span>
+      <button type="button" class="layout-size-btn" data-size="compact" title="Compact">S</button>
+      <button type="button" class="layout-size-btn is-active" data-size="default" title="Default">M</button>
+      <button type="button" class="layout-size-btn" data-size="tall" title="Tall">L</button>
+    </div>
+    <button type="button" id="layout-exit-edit" class="btn btn-accent">Done customizing</button>
+  </div>
+
+  <!-- ============ layout dialog ============ -->
+  <div id="layout-dialog" class="layout-dialog" role="dialog" aria-modal="true" aria-labelledby="layout-dialog-title" hidden>
+    <button type="button" id="layout-dialog-backdrop" class="layout-dialog__backdrop" aria-label="Close" tabindex="-1"></button>
+    <div class="layout-dialog__panel">
+      <header class="layout-dialog__head">
+        <h3 id="layout-dialog-title" class="layout-dialog__title layout-dialog__title--edit">Dashboard layout</h3>
+        <p id="layout-dialog-title-preview" class="layout-dialog__title layout-dialog__title--preview" hidden>
+          Previewing <strong id="layout-preview-view-name">Default</strong>
+          <span id="layout-preview-modified" class="layout-preview-modified" hidden>· modified</span>
         </p>
-        <p class="verdict-detail verdict-detail--window" id="window-summary-detail" hidden>
-          <span class="verdict-detail-line verdict-detail-line--narrative mono" id="window-summary-narrative">—</span>
-        </p>
-        <div class="hero-badges">
-          <span class="hero-badge hero-badge--slot" id="verdict-since" hidden>held <span class="dyn-slot dyn-slot--duration" id="verdict-since-val">—</span></span>
-          <span class="hero-badge hero-badge--pending hero-badge--slot" id="verdict-pending" hidden>
-            <span id="verdict-pending-label">checking</span>
-            <span class="dyn-slot dyn-slot--count" id="verdict-pending-sec">—</span>
-          </span>
-          <span class="hero-badge hero-badge--info">verdict is damped — single pings can't flip it</span>
+        <div class="layout-dialog__head-actions layout-dialog__head-actions--edit">
+          <button type="button" id="layout-dialog-preview" class="btn btn-ghost" aria-pressed="false">Preview</button>
+          <button type="button" id="layout-dialog-close" class="layout-dialog__close" aria-label="Close">×</button>
         </div>
-      </div>
-      <div class="hero-readout" id="hero-readout" data-rating="none">
-        <div class="readout-arc">
-          <svg class="arc-svg" viewBox="0 0 200 118" aria-hidden="true">
-            <path class="arc-track" d="M 16 108 A 84 84 0 0 1 184 108"/>
-            <path class="arc-zone arc-zone--great" d="M 16 108 A 84 84 0 0 1 184 108"
-                  stroke-dasharray="62.97 263.89" stroke-dashoffset="0"/>
-            <path class="arc-zone arc-zone--good" d="M 16 108 A 84 84 0 0 1 184 108"
-                  stroke-dasharray="62.97 263.89" stroke-dashoffset="-65.97"/>
-            <path class="arc-zone arc-zone--okay" d="M 16 108 A 84 84 0 0 1 184 108"
-                  stroke-dasharray="62.97 263.89" stroke-dashoffset="-131.95"/>
-            <path class="arc-zone arc-zone--bad" d="M 16 108 A 84 84 0 0 1 184 108"
-                  stroke-dasharray="62.97 263.89" stroke-dashoffset="-197.92"/>
-            <path class="arc-value" id="arc-value" d="M 16 108 A 84 84 0 0 1 184 108"/>
-            <text class="arc-tick" x="16" y="117" text-anchor="middle">0</text>
-            <text class="arc-tick" x="100" y="14" text-anchor="middle">70</text>
-            <text class="arc-tick" x="184" y="117" text-anchor="middle">200+</text>
-          </svg>
-          <div class="readout-center">
-            <span class="readout-value mono dyn-slot dyn-slot--hero-ms" id="baseline-value">—</span>
-            <span class="readout-unit mono">ms</span>
+        <div class="layout-dialog__head-actions layout-dialog__head-actions--preview" hidden>
+          <button type="button" id="layout-preview-edit" class="btn btn-ghost">Edit panels</button>
+          <button type="button" id="layout-preview-done" class="btn btn-accent">Done</button>
+        </div>
+      </header>
+      <div class="layout-dialog__body">
+        <section class="layout-dialog__views" aria-label="Dashboard views">
+          <h4 class="layout-dialog__pane-title">Views</h4>
+          <ul id="layout-view-list" class="layout-view-list"></ul>
+          <section class="layout-new-view">
+            <h5 class="layout-new-view__title">Save current as custom view</h5>
+            <label for="layout-new-view-name" class="layout-new-view__label">Name</label>
+            <input type="text" id="layout-new-view-name" class="layout-new-view__name" maxlength="48" placeholder="My view">
+            <label for="layout-new-view-template" class="layout-new-view__label">Start from</label>
+            <select id="layout-new-view-template" class="layout-new-view__template"></select>
+            <button type="button" id="layout-new-view-save" class="btn btn-accent">Save view</button>
+          </section>
+        </section>
+        <section class="layout-dialog__panels" aria-label="Panel visibility">
+          <div class="layout-dialog__panels-head">
+            <h4 id="layout-panel-title" class="layout-dialog__pane-title">Panels</h4>
+            <input type="search" id="layout-panel-search" class="layout-panel-search" placeholder="Search panels…" autocomplete="off">
           </div>
-        </div>
-        <p class="readout-caption" id="readout-caption">baseline ping <span class="readout-hint">60s median — single spikes can't move it</span></p>
-        <div class="readout-trend" id="trend-pill" data-trend="unknown">
-          <span class="trend-arrow" aria-hidden="true"></span>
-          <span class="trend-label" id="trend-label">trend pending</span>
-          <span class="trend-delta mono dyn-slot dyn-slot--delta" id="trend-delta" hidden></span>
-        </div>
-      </div>
-    </section>
-
-    <!-- ====== 2 · current status narrative ====== -->
-    <section class="panel status-panel" id="status-panel" data-panel="status" data-level="no_data">
-      <div class="status-head">
-        <h2><span class="status-pulse" aria-hidden="true"></span>Current status</h2>
-        <span class="status-headline mono" id="status-headline">Waiting for data</span>
-      </div>
-      <dl class="status-metrics" id="status-metrics">
-        <div class="status-row" data-metric="ping">
-          <dt>Baseline ping</dt>
-          <dd class="status-value mono"><span class="dyn-slot dyn-slot--ms" id="status-val-ping">—</span></dd>
-          <dd class="status-note" id="status-note-ping">—</dd>
-        </div>
-        <div class="status-row" data-metric="jitter">
-          <dt>Jitter</dt>
-          <dd class="status-value mono"><span class="dyn-slot dyn-slot--ms-dec" id="status-val-jitter">—</span></dd>
-          <dd class="status-note" id="status-note-jitter">—</dd>
-        </div>
-        <div class="status-row" data-metric="loss">
-          <dt>Packet loss</dt>
-          <dd class="status-value mono"><span class="dyn-slot dyn-slot--pct" id="status-val-loss">—</span></dd>
-          <dd class="status-note" id="status-note-loss">—</dd>
-        </div>
-        <div class="status-row" data-metric="spikes">
-          <dt>Spike rate</dt>
-          <dd class="status-value mono"><span class="dyn-slot dyn-slot--rate" id="status-val-spikes">—</span></dd>
-          <dd class="status-note" id="status-note-spikes">—</dd>
-        </div>
-        <div class="status-row" data-metric="trend">
-          <dt>Trend</dt>
-          <dd class="status-value mono"><span class="dyn-slot dyn-slot--trend" id="status-val-trend">—</span></dd>
-          <dd class="status-note" id="status-note-trend">—</dd>
-        </div>
-      </dl>
-      <p class="status-summary" id="status-summary">Waiting for the first pings to come in…</p>
-      <div class="status-pending-slot">
-        <p class="status-pending mono" id="status-pending" hidden>
-          <span id="status-pending-label">Checking</span>
-          <span class="dyn-slot dyn-slot--count" id="status-pending-sec">—</span>
-        </p>
-      </div>
-      <div class="status-chips" id="status-chips">
-        <span class="chip chip--slot" data-chip="ping" data-level="no_data" hidden>
-          <i class="chip-dot" aria-hidden="true"></i>
-          <span class="chip-name">ping</span>
-          <span class="chip-value mono dyn-slot dyn-slot--chip-ms">—</span>
-        </span>
-        <span class="chip chip--slot" data-chip="jitter" data-level="no_data" hidden>
-          <i class="chip-dot" aria-hidden="true"></i>
-          <span class="chip-name">jitter</span>
-          <span class="chip-value mono dyn-slot dyn-slot--chip-ms-dec">—</span>
-        </span>
-        <span class="chip chip--slot" data-chip="loss" data-level="no_data" hidden>
-          <i class="chip-dot" aria-hidden="true"></i>
-          <span class="chip-name">loss</span>
-          <span class="chip-value mono dyn-slot dyn-slot--chip-pct">—</span>
-        </span>
-        <span class="chip chip--slot" data-chip="spikes" data-level="no_data" hidden>
-          <i class="chip-dot" aria-hidden="true"></i>
-          <span class="chip-name">spikes</span>
-          <span class="chip-value mono dyn-slot dyn-slot--chip-rate">—</span>
-        </span>
-      </div>
-    </section>
-
-    <!-- ====== 3 · key indicators ====== -->
-    <section class="indicators" data-panel="indicators" aria-label="Key indicators">
-      <article class="indicator indicator--help" id="ind-ping" data-rating="none" data-metric="ping" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false">
-        <header class="indicator-head">
-          <h3>Ping</h3>
-          <span class="indicator-badge" data-role="badge">—</span>
-        </header>
-        <p class="indicator-value"><span class="mono dyn-slot dyn-slot--indicator" data-role="value">—</span><span class="indicator-unit mono">ms</span></p>
-        <p class="indicator-meaning" data-role="meaning">waiting for data…</p>
-        <div class="indicator-scale" aria-hidden="true">
-          <div class="scale-track"></div>
-          <span class="scale-marker" data-role="marker"></span>
-        </div>
-        <p class="indicator-sub" data-role="sub">baseline · median of last 60s</p>
-      </article>
-
-      <article class="indicator indicator--help" id="ind-jitter" data-rating="none" data-metric="jitter" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false">
-        <header class="indicator-head">
-          <h3>Jitter</h3>
-          <span class="indicator-badge" data-role="badge">—</span>
-        </header>
-        <p class="indicator-value"><span class="mono dyn-slot dyn-slot--indicator-dec" data-role="value">—</span><span class="indicator-unit mono">ms</span></p>
-        <p class="indicator-meaning" data-role="meaning">waiting for data…</p>
-        <div class="indicator-scale" aria-hidden="true">
-          <div class="scale-track"></div>
-          <span class="scale-marker" data-role="marker"></span>
-        </div>
-        <p class="indicator-sub" data-role="sub">timing stability · last 2 min</p>
-      </article>
-
-      <article class="indicator indicator--help" id="ind-loss" data-rating="none" data-metric="loss" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false">
-        <header class="indicator-head">
-          <h3>Packet loss</h3>
-          <span class="indicator-badge" data-role="badge">—</span>
-        </header>
-        <p class="indicator-value"><span class="mono dyn-slot dyn-slot--indicator-pct" data-role="value">—</span><span class="indicator-unit mono">%</span></p>
-        <p class="indicator-meaning" data-role="meaning">waiting for data…</p>
-        <div class="indicator-scale" aria-hidden="true">
-          <div class="scale-track"></div>
-          <span class="scale-marker" data-role="marker"></span>
-        </div>
-        <p class="indicator-sub" data-role="sub">failed pings · last 2 min</p>
-      </article>
-
-      <article class="indicator indicator--help" id="ind-spikes" data-rating="none" data-metric="spikes" tabindex="0" role="button" aria-haspopup="dialog" aria-expanded="false">
-        <header class="indicator-head">
-          <h3>Spike rate</h3>
-          <span class="indicator-badge" data-role="badge">—</span>
-        </header>
-        <p class="indicator-value"><span class="mono dyn-slot dyn-slot--indicator-rate" data-role="value">—</span><span class="indicator-unit mono">/min</span></p>
-        <p class="indicator-meaning" data-role="meaning">waiting for data…</p>
-        <div class="indicator-scale" aria-hidden="true">
-          <div class="scale-track"></div>
-          <span class="scale-marker" data-role="marker"></span>
-        </div>
-        <p class="indicator-sub" data-role="sub">
-          worst <span class="mono dyn-slot dyn-slot--ms" data-role="worst">—</span>
-          · spike &gt; <span class="mono dyn-slot dyn-slot--ms" data-role="threshold">—</span>
-        </p>
-      </article>
-    </section>
-
-    <!-- ====== 4 · live feed (raw, allowed to jump) ====== -->
-    <section class="panel live-panel" data-panel="live">
-      <div class="panel-head">
-        <div>
-          <div class="panel-title-row">
-            <h2>Live feed</h2>
-            <button type="button" class="panel-help-btn" data-help="live-feed" aria-label="About Live feed" aria-haspopup="dialog" aria-expanded="false">
-              <span aria-hidden="true">i</span>
-            </button>
+          <div id="layout-grid-controls" class="layout-grid-controls">
+            <button type="button" id="layout-customize-grid" class="btn btn-accent" aria-pressed="false">Customize grid</button>
+            <button type="button" id="layout-reset-layout" class="btn btn-ghost">Reset layout</button>
+            <div id="layout-size-presets" class="layout-size-presets">
+              <span class="layout-size-presets__label">Height</span>
+              <button type="button" class="layout-size-btn" data-size="compact" title="Compact">S</button>
+              <button type="button" class="layout-size-btn is-active" data-size="default" title="Default">M</button>
+              <button type="button" class="layout-size-btn" data-size="tall" title="Tall">L</button>
+            </div>
           </div>
-          <p class="panel-subtitle">raw per-ping data — this row is <em>allowed</em> to jump</p>
-        </div>
-        <span class="instant-chip" id="instant-chip" data-level="no_data">
-          <span class="chip-dot" aria-hidden="true"></span>
-          <span id="instant-chip-label">No data</span>
-          <span class="instant-chip-note">instant read</span>
-        </span>
-      </div>
-      <div class="live-grid">
-        <div class="live-ticker">
-          <span class="live-ticker-name">last ping</span>
-          <p class="live-ticker-value"><span class="mono dyn-slot dyn-slot--live-ping live-ticker-ping" id="live-ping" data-rating="none">—</span><span class="live-ticker-unit mono">ms</span></p>
-          <span class="live-ticker-sub mono dyn-slot dyn-slot--time" id="live-ping-sub">—</span>
-        </div>
-        <div class="heartbeat-wrap">
-          <div class="heartbeat" id="heartbeat" aria-hidden="true"></div>
-          <div class="heartbeat-meta">
-            <span class="heartbeat-caption mono">last 60 pings · newest on the right</span>
-            <span class="heartbeat-legend mono">
-              <span class="legend-item"><i class="legend-dot legend-dot--great"></i>&lt;40</span>
-              <span class="legend-item"><i class="legend-dot legend-dot--good"></i>&lt;70</span>
-              <span class="legend-item"><i class="legend-dot legend-dot--okay"></i>&lt;110</span>
-              <span class="legend-item"><i class="legend-dot legend-dot--bad"></i>≥110</span>
-              <span class="legend-item"><i class="legend-dot legend-dot--fail"></i>fail</span>
-            </span>
+          <div id="layout-panel-actions" class="layout-panel-actions">
+            <button type="button" id="layout-show-all-panels" class="btn-link">Show all</button>
+            <button type="button" id="layout-hide-all-panels" class="btn-link">Hide all</button>
+            <button type="button" id="layout-reset-btn" class="btn-link">Reset to defaults</button>
+            <button type="button" id="layout-revert-btn" class="btn-link" hidden>Revert changes</button>
           </div>
+          <div id="layout-panel-groups" class="layout-panel-groups"></div>
+        </section>
+      </div>
+      <footer class="layout-dialog__foot">
+        <div class="layout-dialog__foot-left">
+          <button type="button" id="layout-duplicate-btn" class="btn btn-ghost">Duplicate</button>
+          <button type="button" id="layout-export-btn" class="btn btn-ghost">Export</button>
+          <button type="button" id="layout-copy-btn" class="btn btn-ghost">Copy JSON</button>
+          <button type="button" id="layout-import-btn" class="btn btn-ghost">Import</button>
+          <input type="file" id="layout-import-input" accept="application/json,.json" hidden>
+          <span id="layout-footer-count" class="layout-footer-count">0 / 20 custom views</span>
+        </div>
+        <p class="form-error mono layout-error" id="layout-error" hidden></p>
+        <button type="button" id="layout-dialog-done" class="btn btn-accent">Done</button>
+      </footer>
+    </div>
+  </div>
+
+  <!-- ============ settings modal ============ -->
+  <div class="modal" id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-title" hidden>
+    <button class="modal-backdrop" id="settings-backdrop" aria-label="Close"></button>
+    <form class="modal-panel" id="settings-form" novalidate>
+      <div class="modal-head">
+        <h3 id="settings-title">Settings</h3>
+        <button type="button" class="modal-close" id="settings-close" aria-label="Close">×</button>
+      </div>
+      <div class="form-grid">
+        <div class="form-row layout-link-row">
+          <h4>Dashboard layout</h4>
+          <p class="hint">Active view: <span class="mono" id="settings-layout-summary">Default</span></p>
+          <button type="button" class="btn btn-ghost" id="settings-open-layout">Manage dashboard views →</button>
+        </div>
+        <div class="form-row">
+          <label for="set-target-preset">Ping target</label>
+          <select id="set-target-preset"></select>
+          <span class="hint">Anycast DNS resolvers are a reliable yardstick for general internet health.</span>
+        </div>
+        <div class="form-row" id="set-custom-row" hidden>
+          <label for="set-target-custom">Custom host or IP</label>
+          <input type="text" id="set-target-custom" placeholder="e.g. 192.168.1.1 or eu.example.com" spellcheck="false" autocomplete="off">
+        </div>
+        <div class="form-row two">
+          <div class="form-row"><label for="set-ping-interval">Ping interval (s)</label><input type="number" id="set-ping-interval" min="0.1" max="3600" step="0.1"></div>
+          <div class="form-row"><label for="set-full-refresh">Graph refresh (s)</label><input type="number" id="set-full-refresh" min="1" max="3600" step="1"></div>
+        </div>
+        <div class="form-row two">
+          <div class="form-row"><label for="set-conn-refresh">Connection info (s)</label><input type="number" id="set-conn-refresh" min="1" max="3600" step="1"></div>
+          <div class="form-row"><label for="set-hidden-mult">Hidden-tab slowdown (×)</label><input type="number" id="set-hidden-mult" min="1" max="60" step="1"></div>
+        </div>
+        <div class="form-row">
+          <label for="set-log-age">History kept (min)</label>
+          <input type="number" id="set-log-age" min="5" max="10080" step="5">
+        </div>
+        <p class="form-error mono" id="settings-error"></p>
+      </div>
+      <div class="modal-foot">
+        <span class="note">Saved to <span class="mono">config.yaml</span> · applies live</span>
+        <div class="modal-actions">
+          <button type="button" class="btn" id="settings-cancel">Cancel</button>
+          <button type="submit" class="btn btn-accent" id="settings-save">Save</button>
         </div>
       </div>
-    </section>
+    </form>
+  </div>
 
-    <!-- include:history-panels -->
-  </main>
-
-  <!-- include:overlays -->
-
-  <script src="https://cdn.jsdelivr.net/npm/html2canvas-pro@1.5.8/dist/html2canvas-pro.min.js"></script>
-  <script src="/static/js/constants.js?v=3"></script>
-  <script src="/static/js/rating-format.js?v=3"></script>
-  <script src="/static/js/chart-plugins.js?v=3"></script>
-  <script src="/static/js/screenshot.js?v=3"></script>
-  <script src="/static/js/view-builder.js?v=3"></script>
-  <script src="/static/js/app-state.js?v=3"></script>
-  <script src="/static/js/app-ui-verdict.js?v=3"></script>
-  <script src="/static/js/app-ui-live.js?v=3"></script>
-  <script src="/static/js/app-charts.js?v=3"></script>
-  <script src="/static/js/app-analytics.js?v=3"></script>
-  <script src="/static/js/app-window.js?v=3"></script>
-  <script src="/static/app.js?v=3"></script>
+  <script src="/static/js/views-model.js?v=2"></script>
+  <script src="/static/js/dashboard-grid.js?v=2"></script>
+  <script src="/static/js/view-builder.js?v=2"></script>
+  <script src="/static/js/dashboard.js?v=4"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
-from src.metrics_time import _parse_ts
+from src.metrics_time import parse_ts
 
 TREND_RECENT_SECONDS = 120
 TREND_PRIOR_SECONDS = 600
@@ -27,7 +27,7 @@ _QUALITY_PHRASES = {
 
 _TREND_SENTENCES = {
     "improving": "Conditions are improving compared with the previous 10 minutes.",
-    "degrading": "Conditions are worse than the previous 10 minutes — keep an eye on it.",
+    "degrading": "Conditions are worse than the previous 10 minutes - keep an eye on it.",
 }
 
 
@@ -59,7 +59,7 @@ def compute_trend(
     recent: list[dict] = []
     prior: list[dict] = []
     for sample in samples:
-        ts = _parse_ts(sample["ts"])
+        ts = parse_ts(sample["ts"])
         if ts >= recent_cutoff:
             recent.append(sample)
         elif ts >= prior_cutoff:
@@ -121,7 +121,7 @@ def build_status_narrative(
     now: datetime | None = None,
 ) -> dict:
     """Plain-language explanation of what is happening and why it matters in-game."""
-    from src.metrics_verdict import NOW_OFFLINE_TAIL_FAILURES, _rate_loss_pct, _rate_spike_rate
+    from src.metrics_verdict import NOW_OFFLINE_TAIL_FAILURES, rate_loss_pct, rate_spike_rate
 
     now_dt = now or datetime.now(timezone.utc)
 
@@ -137,7 +137,7 @@ def build_status_narrative(
             "headline": _NARRATIVE_HEADLINES["no_data"],
             "summary": "no samples in the last 2 minutes",
             "sentences": [
-                "No pings recorded in the last 2 minutes — the monitor may still be warming up."
+                "No pings recorded in the last 2 minutes - the monitor may still be warming up."
             ],
             "chips": [],
         }
@@ -148,10 +148,10 @@ def build_status_narrative(
         sentences = []
         if tail_failures >= NOW_OFFLINE_TAIL_FAILURES:
             sentences.append(
-                f"Your connection looks down — the last {tail_failures} pings all failed."
+                f"Your connection looks down - the last {tail_failures} pings all failed."
             )
         else:
-            sentences.append("Your connection looks down — nothing is getting through right now.")
+            sentences.append("Your connection looks down - nothing is getting through right now.")
         if seconds_since is not None:
             sentences.append(f"The last successful ping was {_format_seconds_ago(seconds_since)}.")
         sentences.append("Online games will freeze or disconnect until this recovers.")
@@ -171,7 +171,7 @@ def build_status_narrative(
         if jitter_ms is not None:
             opener += f" with {jitter_ms:.1f} ms of jitter"
         quality = _QUALITY_PHRASES.get(level, _QUALITY_PHRASES["okay"])
-        sentences.append(f"{opener} — {quality}.")
+        sentences.append(f"{opener} - {quality}.")
 
     spike_count = flow.get("spike_count", 0)
     worst_spike = flow.get("worst_spike")
@@ -180,36 +180,36 @@ def build_status_narrative(
         sentences.append("No latency spikes in the last 2 minutes.")
     elif worst_spike is not None:
         worst_ms = worst_spike["latency_ms"]
-        ago = _format_seconds_ago((now_dt - _parse_ts(worst_spike["ts"])).total_seconds())
+        ago = _format_seconds_ago((now_dt - parse_ts(worst_spike["ts"])).total_seconds())
         if spike_count == 1:
             sentences.append(
-                f"One spike to {worst_ms:.0f} ms {ago} — an isolated blip like that is a "
+                f"One spike to {worst_ms:.0f} ms {ago} - an isolated blip like that is a "
                 "single micro-hitch, not real lag."
             )
-        elif _rate_spike_rate(spike_rate) in ("good", "okay"):
+        elif rate_spike_rate(spike_rate) in ("good", "okay"):
             sentences.append(
                 f"{spike_count} spikes in the last 2 minutes (worst {worst_ms:.0f} ms, {ago}) "
-                "— you may feel the occasional hitch."
+                "- you may feel the occasional hitch."
             )
         else:
             sentences.append(
-                f"{spike_count} spikes in the last 2 minutes — frequent enough to cause "
+                f"{spike_count} spikes in the last 2 minutes - frequent enough to cause "
                 "rubber-banding in game."
             )
 
     loss_pct = now_stats.get("loss_pct", 0.0)
     if loss_pct > 0:
-        loss_level = _rate_loss_pct(loss_pct)
+        loss_level = rate_loss_pct(loss_pct)
         if loss_level == "good":
-            sentences.append(f"Packet loss is {loss_pct:.1f}% — negligible.")
+            sentences.append(f"Packet loss is {loss_pct:.1f}% - negligible.")
         elif loss_level == "okay":
             sentences.append(
-                f"Packet loss is {loss_pct:.1f}% — enough for the odd hiccup; an action may "
+                f"Packet loss is {loss_pct:.1f}% - enough for the odd hiccup; an action may "
                 "occasionally not register."
             )
         else:
             sentences.append(
-                f"Packet loss is {loss_pct:.1f}% — this hurts gameplay more than raw ping; "
+                f"Packet loss is {loss_pct:.1f}% - this hurts gameplay more than raw ping; "
                 "expect misfires and warping."
             )
 
@@ -222,12 +222,12 @@ def build_status_narrative(
         remaining = max(0.0, pending["needed_seconds"] - pending["for_seconds"])
         if pending["direction"] == "up":
             sentences.append(
-                f"Things look better than the verdict shows — confirming for another "
+                f"Things look better than the verdict shows - confirming for another "
                 f"{remaining:.0f}s before upgrading."
             )
         else:
             sentences.append(
-                f"Watching a possible slowdown — the verdict drops in {remaining:.0f}s "
+                f"Watching a possible slowdown - the verdict drops in {remaining:.0f}s "
                 "if it keeps up."
             )
 

@@ -1,0 +1,64 @@
+@use "../abstracts/mixins" as *;
+
+@layer reset {
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+    overflow-y: scroll;
+  }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    @include min-viewport-height;
+    overflow-x: clip;
+    font-family: var(--font-ui);
+    transition: --level 1.4s ease;
+  }
+
+  ::selection {
+    background: rgba(61, 232, 255, 0.25);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  .mono,
+  .tabular {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Fixed-width slots for live values — width changes stay inside the slot. */
+  .dyn-slot {
+    display: inline-block;
+    font-variant-numeric: tabular-nums;
+    vertical-align: baseline;
+  }
+
+  .dyn-slot--ms { min-width: 3.25rem; text-align: right; }
+  .dyn-slot--ms-dec { min-width: 3.75rem; text-align: right; }
+  .dyn-slot--pct { min-width: 3.5rem; text-align: right; }
+  .dyn-slot--rate { min-width: 4.25rem; text-align: right; }
+  .dyn-slot--trend { min-width: 5.5rem; text-align: right; }
+  .dyn-slot--count { min-width: 1.75rem; text-align: right; }
+  .dyn-slot--duration { min-width: 2.75rem; text-align: right; }
+  .dyn-slot--delta { min-width: 9.5rem; text-align: left; }
+  .dyn-slot--hero-ms { min-width: 3.5rem; text-align: center; }
+  .dyn-slot--live-ping { min-width: 3.25rem; text-align: right; }
+  .dyn-slot--time { min-width: 7.5rem; }
+  .dyn-slot--indicator { min-width: 3.5ch; text-align: right; }
+  .dyn-slot--indicator-dec { min-width: 5ch; text-align: right; }
+  .dyn-slot--indicator-pct { min-width: 4ch; text-align: right; }
+  .dyn-slot--indicator-rate { min-width: 4ch; text-align: right; }
+  .dyn-slot--chip-ms { min-width: 2.75rem; text-align: right; }
+  .dyn-slot--chip-ms-dec { min-width: 3rem; text-align: right; }
+  .dyn-slot--chip-pct { min-width: 2.75rem; text-align: right; }
+  .dyn-slot--chip-rate { min-width: 2.5rem; text-align: right; }
+}

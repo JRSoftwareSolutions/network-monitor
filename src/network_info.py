@@ -1,11 +1,10 @@
 import json
 import subprocess
-import sys
 import threading
 import time
 from typing import TypedDict
 
-CREATE_NO_WINDOW = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
+from src.win_proc import CREATE_NO_WINDOW, ping_startupinfo
 
 
 class ActiveConnection(TypedDict):
@@ -61,15 +60,6 @@ _cached_result: ActiveConnection | None = None
 _cached_at: float = 0.0
 
 
-def _ping_startupinfo() -> subprocess.STARTUPINFO | None:
-    if sys.platform != "win32":
-        return None
-    startupinfo = subprocess.STARTUPINFO()
-    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    startupinfo.wShowWindow = subprocess.SW_HIDE
-    return startupinfo
-
-
 def _fetch_active_connection() -> ActiveConnection:
     try:
         result = subprocess.run(
@@ -79,7 +69,7 @@ def _fetch_active_connection() -> ActiveConnection:
             encoding="utf-8",
             errors="replace",
             timeout=5,
-            startupinfo=_ping_startupinfo(),
+            startupinfo=ping_startupinfo(),
             creationflags=CREATE_NO_WINDOW,
         )
         if result.returncode != 0:

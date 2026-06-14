@@ -1,3 +1,4 @@
+import logging
 import shutil
 import sys
 from dataclasses import dataclass
@@ -25,10 +26,24 @@ MIN_HIDDEN_POLL_MULTIPLIER = 1
 MAX_HIDDEN_POLL_MULTIPLIER = 60
 MIN_LOG_AGE_MINUTES = 5
 MAX_LOG_AGE_MINUTES = 10080  # one week
+MIN_SERVER_PORT = 1
+MAX_SERVER_PORT = 65535
+MIN_DEFAULT_WINDOW_MINUTES = 1
+MAX_DEFAULT_WINDOW_MINUTES = 1440
 
 DEFAULT_FULL_REFRESH_SECONDS = 60.0
 DEFAULT_CONNECTION_REFRESH_SECONDS = 120.0
 DEFAULT_HIDDEN_POLL_MULTIPLIER = 10
+DEFAULT_TARGET = "1.1.1.1"
+DEFAULT_LOG_FILE = "logs/metrics.jsonl"
+DEFAULT_SERVER_HOST = "127.0.0.1"
+DEFAULT_SERVER_PORT = 8080
+DEFAULT_WINDOW_MINUTES = 30
+DEFAULT_MAX_LOG_AGE_MINUTES = 180
+DEFAULT_ARCHIVE_DIR = "logs/archive"
+DEFAULT_MAX_LOG_SIZE_MB = 1.0
+
+_logger = logging.getLogger(__name__)
 
 
 def _clamp(value: float, lower: float, upper: float) -> float:
@@ -49,6 +64,14 @@ def clamp_hidden_poll_multiplier(value: int | float) -> int:
 
 def clamp_log_age_minutes(value: int | float) -> int:
     return int(_clamp(int(value), MIN_LOG_AGE_MINUTES, MAX_LOG_AGE_MINUTES))
+
+
+def clamp_server_port(value: int | float) -> int:
+    return int(_clamp(int(value), MIN_SERVER_PORT, MAX_SERVER_PORT))
+
+
+def clamp_default_window_minutes(value: int | float) -> int:
+    return int(_clamp(int(value), MIN_DEFAULT_WINDOW_MINUTES, MAX_DEFAULT_WINDOW_MINUTES))
 
 
 def normalize_target(value: str) -> str:
@@ -75,30 +98,127 @@ class Config:
     hidden_poll_multiplier: int = DEFAULT_HIDDEN_POLL_MULTIPLIER
 
 
+def _resolve_path(raw_path: str | Path, default: str) -> Path:
+    path = Path(raw_path or default)
+    if not path.is_absolute():
+        path = APP_ROOT / path
+    return path
+
+
+def _coerce_int(raw, default: int, *, key: str, errors: list[str]) -> int:
+    if raw is None:
+        return default
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        errors.append(f"{key} must be an integer; using default {default}")
+        return default
+
+
 def load_config(path: Path | None = None) -> Config:
     config_path = path or DEFAULT_CONFIG_PATH
-    with config_path.open(encoding="utf-8") as handle:
-        raw = yaml.safe_load(handle)
+    errors: list[str] = []
+    raw: dict = {}
 
-    log_file = Path(raw["log_file"])
-    if not log_file.is_absolute():
-        log_file = APP_ROOT / log_file
+    if not config_path.exists():
+        errors.append(f"Config file not found: {config_path}")
+    else:
+        try:
+            content = config_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            errors.append(f"Cannot read config file: {exc}")
+        else:
+            if not content.strip():
+                errors.append("Config file is empty")
+            else:
+                try:
+                    loaded = yaml.safe_load(content)
+                except yaml.YAMLError as exc:
+                    errors.append(f"Invalid YAML in config: {exc}")
+                else:
+                    if loaded is None:
+                        errors.append("Config file contains no data")
+                    elif not isinstance(loaded, dict):
+                        errors.append("Config root must be a mapping")
+                    else:
+                        raw = loaded
 
-    archive_dir = Path(raw.get("archive_dir", "logs/archive"))
-    if not archive_dir.is_absolute():
-        archive_dir = APP_ROOT / archive_dir
+    for message in errors:
+        _logger.warning("Config: %s", message)
 
-    max_log_size_mb = float(raw.get("max_log_size_mb", 1))
+    target_raw = raw.get("target", DEFAULT_TARGET)
+    try:
+        target = normalize_target(str(target_raw))
+    except ValueError:
+        _logger.warning("Config: target must not be empty; using default %s", DEFAULT_TARGET)
+        target = DEFAULT_TARGET
+
+    ping_interval = clamp_ping_interval_seconds(
+        raw.get("ping_interval_seconds", MIN_PING_INTERVAL_SECONDS)
+    )
+
+    log_file = _resolve_path(raw.get("log_file", DEFAULT_LOG_FILE), DEFAULT_LOG_FILE)
+    archive_dir = _resolve_path(raw.get("archive_dir", DEFAULT_ARCHIVE_DIR), DEFAULT_ARCHIVE_DIR)
+
+    max_log_size_mb = raw.get("max_log_size_mb", DEFAULT_MAX_LOG_SIZE_MB)
+    try:
+        max_log_size_mb = float(max_log_size_mb)
+    except (TypeError, ValueError):
+        _logger.warning(
+            "Config: max_log_size_mb must be numeric; using default %s",
+            DEFAULT_MAX_LOG_SIZE_MB,
+        )
+        max_log_size_mb = DEFAULT_MAX_LOG_SIZE_MB
     max_log_size_bytes = max(1, int(max_log_size_mb * 1024 * 1024))
 
+    server_host = str(raw.get("server_host", DEFAULT_SERVER_HOST))
+
+    server_port = _coerce_int(
+        raw.get("server_port"),
+        DEFAULT_SERVER_PORT,
+        key="server_port",
+        errors=errors,
+    )
+    if not MIN_SERVER_PORT <= server_port <= MAX_SERVER_PORT:
+        _logger.warning(
+            "Config: server_port %s out of range %s-%s; using default %s",
+            server_port,
+            MIN_SERVER_PORT,
+            MAX_SERVER_PORT,
+            DEFAULT_SERVER_PORT,
+        )
+        server_port = DEFAULT_SERVER_PORT
+
+    default_window_minutes = _coerce_int(
+        raw.get("default_window_minutes"),
+        DEFAULT_WINDOW_MINUTES,
+        key="default_window_minutes",
+        errors=errors,
+    )
+    default_window_minutes = clamp_default_window_minutes(default_window_minutes)
+    if raw.get("default_window_minutes") is not None:
+        requested = int(raw["default_window_minutes"])
+        if requested != default_window_minutes:
+            _logger.warning(
+                "Config: default_window_minutes %s out of range %s-%s; using %s",
+                requested,
+                MIN_DEFAULT_WINDOW_MINUTES,
+                MAX_DEFAULT_WINDOW_MINUTES,
+                default_window_minutes,
+            )
+
+    max_log_age_minutes = clamp_log_age_minutes(
+        raw.get("max_log_age_minutes", DEFAULT_MAX_LOG_AGE_MINUTES)
+    )
+
     return Config(
-        target=normalize_target(raw["target"]),
-        ping_interval_seconds=clamp_ping_interval_seconds(raw["ping_interval_seconds"]),
+        target=target,
+        ping_interval_seconds=ping_interval,
         log_file=log_file,
-        server_host=str(raw["server_host"]),
-        server_port=int(raw["server_port"]),
-        default_window_minutes=int(raw["default_window_minutes"]),
-        max_log_age_minutes=clamp_log_age_minutes(raw["max_log_age_minutes"]),
+        server_host=server_host,
+        server_port=server_port,
+        default_window_minutes=default_window_minutes,
+        max_log_age_minutes=max_log_age_minutes,
         archive_enabled=bool(raw.get("archive_enabled", True)),
         max_log_size_bytes=max_log_size_bytes,
         archive_dir=archive_dir,

@@ -68,7 +68,7 @@ After each ping, the live log file is maintained to stay manageable:
 1. **Age-based** — entries older than `max_log_age_minutes` are removed from the live file.
 2. **Size-based** — if the live file still exceeds `max_log_size_mb`, the oldest remaining entries are removed until it is under the limit.
 
-Log maintenance runs at most once per minute (not on every ping). When `archive_enabled` is `true` (default), removed entries are written to timestamped files under `archive_dir`, e.g. `logs/archive/metrics-2026-06-12T16-30-00.123Z.jsonl`. When disabled, removed entries are discarded.
+Log maintenance runs at most once per minute (not on every ping). When `archive_enabled` is `true` (default), removed entries are written to daily archive files under `archive_dir`, e.g. `logs/archive/metrics-2026-06-14.jsonl`. When disabled, removed entries are discarded.
 
 The dashboard reads from an in-memory sample store (seeded from the live log on startup); archives are kept for historical retention.
 
@@ -101,7 +101,7 @@ Top to bottom:
 Plus:
 
 - Live tab title (`28 ms · Good to game`) and a favicon dot that recolors with the verdict, so the tab works as a background monitor
-- Poll interval matches `ping_interval_seconds` from config; checks `/api/metrics/status` each interval and only loads full metrics when a new sample is available (cached server-side between samples)
+- Poll interval matches `ping_interval_seconds` from config; lightweight `/api/metrics/live` checks use `knownTs` so full metrics load only when a new sample is available
 - Connection info refreshes every 2 minutes (cached server-side for 5 minutes)
 - Background tab polling slows to 5× the normal interval
 - Rolling window options derived from `max_log_age_minutes`; selection saved in browser `localStorage`
@@ -126,7 +126,7 @@ Computed server-side over the last 120 seconds; the instant verdict is the worst
 |----------|-------------|
 | `GET /api/config` | Monitor configuration for the UI (includes `window_options`) |
 | `GET /api/connection` | Active network connection (WiFi/Ethernet + name) |
-| `GET /api/metrics/status` | Latest sample timestamp (lightweight poll check) |
+| `GET /api/metrics/live?knownTs=…` | Lightweight poll: recent samples + `now` verdict when timestamp changed |
 | `GET /api/metrics?windowMinutes=30` | Filtered samples, stats, health, outages, and blocks |
 
 `/api/metrics` response includes:
@@ -152,3 +152,90 @@ Packet loss in stats is computed over the selected window: `(failed pings / tota
 ## Ping parsing
 
 On Windows, pings use the native `IcmpSendEcho` API (no `ping.exe` subprocess per sample). Hostnames are resolved once and cached for five minutes; if native ICMP is unavailable, the monitor falls back to locale-neutral parsing of the `ping` command output (e.g. Dutch `tijd=14 ms`).
+
+## Project layout
+
+### Python (`src/`)
+
+| Module | Role |
+|--------|------|
+| `server.py` | FastAPI app, static files, metrics API |
+| `desktop.py` | PyInstaller desktop entry (WebView2 window) |
+| `ping_monitor.py` | Async ping loop, orchestrates store + logger |
+| `sample_store.py` | In-memory ring buffer of recent samples |
+| `metrics_logger.py` | JSONL persistence, age/size maintenance, daily archives |
+| `metrics_analytics.py` | Downsampling, bucketing, stats, outage detection |
+| `metrics.py` | Public facade re-exporting analytics + store APIs |
+| `metrics_verdict.py` | Gaming thresholds, stabilizer hysteresis |
+| `metrics_narrative.py` | Plain-language status copy |
+| `metrics_time.py` | Timestamp parsing/formatting helpers |
+| `config.py` | YAML config load/save with validation |
+| `network_info.py` | Windows connection label for the UI |
+| `win_ping.py` / `win_proc.py` / `jitter.py` | Native ICMP, process helpers, jitter tracker |
+
+### Frontend (`static/js/` — zero-build IIFE modules on `window.NM`)
+
+Scripts load in dependency order from `index.html`. Each file registers its public API on `NM` (e.g. `NM.constants`, `NM.grid`, `NM.views`).
+
+| Module | Role |
+|--------|------|
+| `namespace.js` | Creates `window.NM` |
+| `constants.js`, `rating-format.js` | Thresholds, formatting |
+| `chart-config.js`, `charts-*.js`, `chart-plugins.js` | Chart.js setup |
+| `dashboard-grid.js` | GridStack layout (`NM.grid`) |
+| `views-model.js`, `views-panels.js`, `views-dialog.js`, `view-builder.js` | Dashboard views/layout (`NM.views`) |
+| `app-*.js`, `../app.js` | App shell, polling, UI wiring (`NM.app`) |
+
+## CSS architecture
+
+Styles are bundled from a single SCSS entry point through Sass and PostCSS:
+
+| File | Responsibility |
+|------|----------------|
+| `static/scss/main.scss` | Source entry — `@use` chain in layer order |
+| `static/css/app.css` | Built bundle loaded by the dashboard (`npm run build:css`) |
+| `static/scss/abstracts/_tokens.scss` | Design tokens (`:root` vars, `@property` rules) |
+| `static/scss/abstracts/_breakpoints.scss` | Sass breakpoint mixins (`bp-md`, etc.) |
+| `static/scss/components/_shell.scss` | Page chrome, hero, status panel appearance |
+| `static/scss/components/_tiles.scss` | Indicators, live feed tiles, settings popover |
+| `static/scss/components/_data.scss` | History panels, charts, tables |
+| `static/scss/components/_dashboard-grid.scss` | **GridStack layout** — positioning, edit mode, size presets |
+| `static/css/vendor-gridstack.css` | GridStack vendor styles (committed; refresh with `npm run vendor:gridstack`) |
+| `static/scss/_overrides.scss` | Theme mappings and final cascade overrides |
+
+**Rules:**
+
+- The app loads one stylesheet: `/static/css/app.css` (rebuild after editing SCSS source files).
+- Never add `.grid-stack-*` selectors outside `_dashboard-grid.scss` or `vendor-gridstack.css`.
+- Panel wrappers (`[data-panel]`) hold GridStack attributes; inner `<section>` elements hold visual classes.
+- Dynamic sizing uses CSS custom properties set from JS (`--hb-height`, `--arc-offset`, etc.).
+
+```bash
+npm run build:css        # compile main.scss → app.css (via main.interim.css)
+npm run watch:css        # rebuild SCSS → app.css on change (sass + postcss in parallel)
+npm run vendor:gridstack # copy GridStack CSS from node_modules (do not curl the CDN)
+npm run lint:css         # stylelint guardrails
+```
+
+Layer order is declared in `static/scss/base/_layers.scss`: `tokens → reset → vendor → primitives → components → utilities → overrides`.
+
+## Tests
+
+Python unit tests (behavior of ping parsing, config, verdict math, analytics):
+
+```bash
+pip install -r requirements-dev.txt
+python -m pytest tests/py -q
+```
+
+JavaScript unit tests + Playwright e2e:
+
+```bash
+npm install
+npm run build:css
+npm test
+```
+
+The test chain runs `build:css` → `lint:css` → `test:unit` → `test:e2e`.
+
+`npm run test:py` runs the Python suite; `npm run test:unit` and `npm run test:e2e` run JS tests separately.

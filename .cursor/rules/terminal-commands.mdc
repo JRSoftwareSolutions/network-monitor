@@ -1,0 +1,35 @@
+---
+description: Safe shell and HTTP commands on Windows (avoid hung terminals)
+alwaysApply: true
+---
+
+# Terminal and HTTP commands
+
+This project runs on Windows PowerShell. Agents often hang integrated terminals with silent, untimed `curl` calls. Follow these rules.
+
+## curl on Windows
+
+- Always use `curl.exe`, never bare `curl` (PowerShell aliases it to `Invoke-WebRequest`).
+- Always pass `--max-time`: `2` for localhost, `15` for external URLs.
+- Do not use `-s` when debugging; prefer visible output or `-f` with a timeout.
+- Local health check:
+
+```powershell
+curl.exe -sf --max-time 2 http://127.0.0.1:8080/api/config
+```
+
+- Before probing localhost, confirm the server is running (or use `start.bat`, which waits up to 30s).
+
+## Vendor assets
+
+- Do **not** download CDN/vendor files with ad-hoc `curl` commands.
+- GridStack CSS is committed at `static/css/vendor-gridstack.css`.
+- To refresh it, run `npm run vendor:gridstack` (copies from the pinned npm package).
+
+## Prefer project scripts
+
+- CSS build: `npm run build:css`
+- Start app: `start.bat`
+- Tests: `npm test`
+
+Do not invent one-off network fetches when a script or committed file already exists.

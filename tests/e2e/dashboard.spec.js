@@ -1,5 +1,11 @@
 const { test, expect } = require("@playwright/test");
 
+async function waitForLiveStatus(page) {
+  await expect(page.locator("#status-text")).toHaveText(/Live|Waiting for data|Connecting/, {
+    timeout: 10000,
+  });
+}
+
 test("dashboard loads and shows connection status", async ({ page }) => {
   const consoleErrors = [];
   page.on("console", (msg) => {
@@ -9,68 +15,88 @@ test("dashboard loads and shows connection status", async ({ page }) => {
   });
 
   await page.goto("/");
-  await expect(page.locator("#hero")).toBeVisible();
-  await expect(page.locator("#status-panel")).toBeVisible();
-  // Bootstrap runs poll(true); wait for metrics fetch to finish.
-  await expect(page.locator("#status-text")).toHaveText(/Live|Waiting for data|Connection error/, {
-    timeout: 10000,
-  });
+  await expect(page.locator(".hero")).toBeVisible();
+  await expect(page.locator("#status-pill")).toBeVisible();
+  await waitForLiveStatus(page);
   await expect(page.locator("#status-text")).not.toHaveText("Connection error");
 
   expect(consoleErrors).toEqual([]);
 });
 
-test("settings popover opens and closes", async ({ page }) => {
+test("indicators show four metric tiles", async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/");
+  await expect(page.locator("#ind-ping")).toBeVisible();
+  await expect(page.locator(".indicators .indicator")).toHaveCount(4);
+});
+
+test("settings modal opens and closes", async ({ page }) => {
   await page.goto("/");
 
-  const toggle = page.locator("#settings-toggle");
-  await expect(toggle).toBeVisible();
-  await toggle.click();
-
-  const popover = page.locator("#settings-popover");
-  await expect(popover).toBeVisible();
-  await expect(toggle).toHaveAttribute("aria-expanded", "true");
+  await page.locator("#settings-btn").click();
+  await expect(page.locator("#settings-modal")).toBeVisible();
 
   await page.locator("#settings-close").click();
-  await expect(popover).toBeHidden();
-  await expect(toggle).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("#settings-modal")).toBeHidden();
 });
 
-test("window quality visualizations render in default view", async ({ page }) => {
+test("window selector and charts render", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("#status-text")).toHaveText(/Live|Waiting for data/, { timeout: 10000 });
+  await waitForLiveStatus(page);
 
-  await expect(page.locator("#quality-breakdown")).toBeVisible();
+  await expect(page.locator("#window-select")).toBeVisible();
   await expect(page.locator("#quality-timeline")).toBeVisible();
-  await expect(page.locator(".chart-legend")).toContainText("p95");
-  await expect(page.locator(".chart-legend")).toContainText("baseline");
-  await expect(page.locator("#export-metrics-btn")).toBeVisible();
-  await expect(page.locator(".stat-sparkline").first()).toBeVisible();
+  await expect(page.locator("#latency-chart")).toBeVisible();
+  await expect(page.locator("#health-chip")).toBeVisible();
 });
 
-test("analytics view shows visualization panels and hides live sections", async ({ page }) => {
-  const consoleErrors = [];
-  page.on("console", (msg) => {
-    if (msg.type() === "error") {
-      consoleErrors.push(msg.text());
-    }
-  });
-
+test("view selector and layout dialog", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("#status-text")).toHaveText(/Live|Waiting for data/, { timeout: 10000 });
+  await waitForLiveStatus(page);
 
-  const viewSelect = page.locator("#view-select");
-  await expect(viewSelect).toBeVisible();
-  await viewSelect.selectOption("analytics");
+  await expect(page.locator("#view-select")).toBeVisible();
+  await expect(page.locator("#view-select option")).toHaveCount(2);
 
-  await expect(page.locator("body")).toHaveAttribute("data-dashboard-view", "analytics");
-  await expect(page.locator("#hero")).toBeHidden();
-  await expect(page.locator('[data-panel="live"]')).toBeHidden();
-  await expect(page.locator('[data-panel="stats"]')).toBeVisible();
-  await expect(page.locator("#quality-composition-chart")).toBeVisible();
-  await expect(page.locator("#spike-timeline-chart")).toBeVisible();
-  await expect(page.locator("#latency-jitter-scatter-chart")).toBeVisible();
-  await expect(page.locator("#latency-chart")).toBeVisible();
+  await page.locator("#layout-toggle").click();
+  await expect(page.locator("#layout-dialog")).toBeVisible();
+  await expect(page.locator("#layout-panel-groups")).toBeVisible();
 
-  expect(consoleErrors).toEqual([]);
+  await page.locator("#layout-dialog-close").click();
+  await expect(page.locator("#layout-dialog")).toBeHidden();
+});
+
+test("customize grid enables edit mode", async ({ page }) => {
+  await page.setViewportSize({ width: 1400, height: 900 });
+  await page.goto("/");
+  await waitForLiveStatus(page);
+
+  await page.locator("#layout-toggle").click();
+  await page.locator("#layout-customize-grid").click();
+  await expect(page.locator("body")).toHaveAttribute("data-layout-edit", "true");
+  await expect(page.locator("#layout-edit-bar")).toBeVisible();
+
+  await page.locator("#layout-exit-edit").click();
+  await expect(page.locator("body")).not.toHaveAttribute("data-layout-edit", "true");
+});
+
+test("analytics view hides live panels", async ({ page }) => {
+  await page.goto("/");
+  await waitForLiveStatus(page);
+
+  await page.selectOption("#view-select", "analytics");
+  await expect(page.locator('[data-panel="hero"]')).toHaveClass(/is-panel-hidden/);
+  await expect(page.locator('[data-panel="latency"]')).not.toHaveClass(/is-panel-hidden/);
+});
+
+test.describe("visual regression", () => {
+  test.use({ viewport: { width: 1400, height: 900 } });
+
+  test("default dashboard view", async ({ page }) => {
+    await page.goto("/");
+    await waitForLiveStatus(page);
+    await page.waitForTimeout(750);
+    await expect(page.locator("#dashboard-grid")).toHaveScreenshot("default-view.png", {
+      maxDiffPixelRatio: 0.05,
+    });
+  });
 });

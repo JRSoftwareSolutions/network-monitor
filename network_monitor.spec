@@ -20,12 +20,14 @@ a = Analysis(
         (str(ROOT / "config.yaml"), "."),
     ],
     hiddenimports=[
-        "src.metrics_store",
-        "src.metrics_log",
+        "src.sample_store",
+        "src.metrics_logger",
+        "src.metrics_analytics",
         "src.metrics_verdict",
         "src.metrics_narrative",
         "src.metrics_time",
-        # uvicorn picks its implementations dynamically at runtime.
+        "src.jitter",
+        "src.win_proc",
         "uvicorn.logging",
         "uvicorn.loops",
         "uvicorn.loops.auto",

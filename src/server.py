@@ -1,4 +1,3 @@
-import base64
 import re
 import threading
 from contextlib import asynccontextmanager
@@ -11,7 +10,6 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
 from src.config import (
-    APP_ROOT,
     BUNDLE_ROOT,
     MAX_HIDDEN_POLL_MULTIPLIER,
     MAX_LOG_AGE_MINUTES,
@@ -34,7 +32,7 @@ from src.metrics import (
     TREND_PRIOR_SECONDS,
     TREND_RECENT_SECONDS,
     VerdictStabilizer,
-    _parse_ts,
+    parse_ts,
     bucket_samples,
     build_status_narrative,
     clamp_window_minutes,
@@ -53,7 +51,6 @@ from src.network_info import get_active_connection
 from src.ping_monitor import PingMonitor
 
 STATIC_DIR = BUNDLE_ROOT / "static"
-SCREENSHOTS_DIR = APP_ROOT / "screenshots"
 
 config = load_config()
 monitor = PingMonitor(
@@ -100,11 +97,6 @@ metrics_cache = MetricsCache()
 _TARGET_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:\-]{0,252}$")
 
 
-class ScreenshotUpload(BaseModel):
-    image: str = Field(min_length=32, max_length=20_000_000)
-    label: str | None = Field(default=None, max_length=64)
-
-
 class SettingsUpdate(BaseModel):
     target: str | None = None
     ping_interval_seconds: float | None = Field(
@@ -144,7 +136,7 @@ def _now_window_minutes() -> int:
 
 def _filter_samples(samples: list[dict], window_minutes: int) -> list[dict]:
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
-    return [sample for sample in samples if _parse_ts(sample["ts"]) >= cutoff]
+    return [sample for sample in samples if parse_ts(sample["ts"]) >= cutoff]
 
 
 def _build_now_payload(trend_samples: list[dict]) -> dict:
@@ -239,16 +231,12 @@ app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 
 def _render_index_html() -> str:
-    html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
-    for name in ("history-panels", "overlays"):
-        fragment = (STATIC_DIR / "partials" / f"{name}.html").read_text(encoding="utf-8")
-        html = html.replace(f"<!-- include:{name} -->", fragment)
-    return html
+    return (STATIC_DIR / "index.html").read_text(encoding="utf-8")
 
 
 @app.get("/")
 async def index():
-    return HTMLResponse(_render_index_html())
+    return HTMLResponse(_render_index_html(), media_type="text/html; charset=utf-8")
 
 
 def _config_payload() -> dict:
@@ -267,28 +255,6 @@ def _config_payload() -> dict:
 @app.get("/api/config")
 async def api_config():
     return _config_payload()
-
-
-@app.post("/api/screenshot")
-async def api_screenshot(body: ScreenshotUpload):
-    data = body.image.strip()
-    if data.startswith("data:"):
-        _, _, data = data.partition(",")
-    try:
-        png_bytes = base64.b64decode(data, validate=True)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail="Invalid screenshot image data") from exc
-    if not png_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
-        raise HTTPException(status_code=400, detail="Screenshot must be a PNG image")
-
-    SCREENSHOTS_DIR.mkdir(parents=True, exist_ok=True)
-    label = (body.label or "dashboard").strip().lower()
-    label = re.sub(r"[^a-z0-9_-]+", "-", label).strip("-_") or "dashboard"
-    label = label[:48]
-    filename = f"{label}-{datetime.now().strftime('%Y%m%d-%H%M%S')}.png"
-    path = SCREENSHOTS_DIR / filename
-    path.write_bytes(png_bytes)
-    return {"filename": filename, "path": str(path.resolve())}
 
 
 @app.post("/api/config")
@@ -322,16 +288,8 @@ def api_connection():
     return get_active_connection()
 
 
-@app.get("/api/metrics/status")
-async def api_metrics_status():
-    latest = monitor.get_latest_sample()
-    return {
-        "latest_ts": latest["ts"] if latest else None,
-    }
-
-
 @app.get("/api/metrics/live")
-async def api_metrics_live(knownTs: str | None = Query(default=None)):
+def api_metrics_live(knownTs: str | None = Query(default=None)):
     latest = monitor.get_latest_sample()
     latest_ts = latest["ts"] if latest else None
     if knownTs is not None and knownTs == latest_ts:
@@ -345,7 +303,7 @@ async def api_metrics_live(knownTs: str | None = Query(default=None)):
 
 
 @app.get("/api/metrics")
-async def api_metrics(
+def api_metrics(
     windowMinutes: int = Query(default=config.default_window_minutes),
     knownTs: str | None = Query(default=None),
 ):

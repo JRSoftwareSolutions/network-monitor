@@ -7,22 +7,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 from src.metrics import JitterTracker, MetricsLogger, SampleStore, read_samples
+from src.win_proc import CREATE_NO_WINDOW, ping_startupinfo
 
 # Locale-neutral: matches time=14ms, tijd=14 ms, temps=14,5ms, etc.
 LATENCY_PATTERN = re.compile(r"[=<]\s*(\d+(?:[.,]\d+)?)\s*ms", re.IGNORECASE)
 SUB_MILLIS_PATTERN = re.compile(r"[=<]\s*1\s*ms", re.IGNORECASE)
 
 DNS_REFRESH_SECONDS = 300.0
-_PING_CREATION_FLAGS = subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-
-
-def _ping_startupinfo() -> subprocess.STARTUPINFO | None:
-    if sys.platform != "win32":
-        return None
-    startupinfo = subprocess.STARTUPINFO()
-    startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-    startupinfo.wShowWindow = subprocess.SW_HIDE
-    return startupinfo
 
 
 def parse_ping_output(output: str, returncode: int = 0) -> tuple[bool, float | None]:
@@ -48,8 +39,8 @@ def run_ping_subprocess(target: str, timeout_ms: int = 1000) -> tuple[bool, floa
         text=True,
         encoding="cp437",
         errors="replace",
-        startupinfo=_ping_startupinfo(),
-        creationflags=_PING_CREATION_FLAGS,
+        startupinfo=ping_startupinfo(),
+        creationflags=CREATE_NO_WINDOW,
     )
     output = result.stdout + result.stderr
     return parse_ping_output(output, result.returncode)
