@@ -98,9 +98,9 @@
     pollIntervalMs: 1000,
     fullRefreshMs: 60000,
     connRefreshMs: 120000,
-    hiddenMultiplier: 10,
     sparklineNow: null,
     sparklineSamples: [],
+    heartbeatSamples: [],
   };
   const charts = {};
 
@@ -408,44 +408,65 @@
         if (sub) sub.textContent = data.text || "spikes above rolling baseline";
       }
     }
-    updateIndicatorSparklines(now, samples);
   }
 
   /* ---------- live feed + heartbeat ---------- */
-  let heartbeatBuilt = false;
-  function buildHeartbeat() {
-    const wrap = $("heartbeat");
-    if (!wrap) return;
-    wrap.innerHTML = "";
-    for (let i = 0; i < 60; i++) {
-      const bar = document.createElement("span");
-      bar.className = "hb-bar";
-      bar.style.height = "4px";
-      wrap.appendChild(bar);
-    }
-    heartbeatBuilt = true;
-  }
-  function renderLive(now, recent) {
-    if (!heartbeatBuilt) buildHeartbeat();
-    const bars = $("heartbeat").children;
-    const samples = (recent || []).slice(-60);
-    const offset = bars.length - samples.length;
+  const HEARTBEAT_SLOTS = 60;
 
-    for (let i = 0; i < bars.length; i++) {
-      const bar = bars[i];
-      const sample = i >= offset ? samples[i - offset] : null;
-      if (!sample) { bar.style.height = "4px"; bar.dataset.rating = "none"; bar.title = ""; continue; }
-      if (!sample.success || sample.latency_ms == null) {
-        bar.style.height = "100%";
-        bar.dataset.rating = "fail";
-        bar.title = `${timeOfDay(sample.ts)} · failed`;
-      } else {
-        const h = Math.max(8, Math.min(100, (sample.latency_ms / 150) * 100));
-        bar.style.height = `${h}%`;
-        bar.dataset.rating = ratePing(sample.latency_ms);
-        bar.title = `${timeOfDay(sample.ts)} · ${fmtMs(sample.latency_ms)} ms`;
-      }
+  function applyHeartbeatBar(bar, sample) {
+    if (!sample) {
+      bar.style.height = "4px";
+      bar.dataset.rating = "none";
+      bar.title = "";
+      return;
     }
+    if (!sample.success || sample.latency_ms == null) {
+      bar.style.height = "100%";
+      bar.dataset.rating = "fail";
+      bar.title = `${timeOfDay(sample.ts)} · failed`;
+      return;
+    }
+    const h = Math.max(8, Math.min(100, (sample.latency_ms / 150) * 100));
+    bar.style.height = `${h}%`;
+    bar.dataset.rating = ratePing(sample.latency_ms);
+    bar.title = `${timeOfDay(sample.ts)} · ${fmtMs(sample.latency_ms)} ms`;
+  }
+
+  function createHeartbeatBar(sample) {
+    const bar = document.createElement("span");
+    bar.className = "hb-bar";
+    applyHeartbeatBar(bar, sample);
+    return bar;
+  }
+
+  function rebuildHeartbeat(wrap, samples) {
+    wrap.innerHTML = "";
+    const pad = Math.max(0, HEARTBEAT_SLOTS - samples.length);
+    for (let i = 0; i < pad; i++) wrap.appendChild(createHeartbeatBar(null));
+    for (const sample of samples) wrap.appendChild(createHeartbeatBar(sample));
+  }
+
+  function scrollHeartbeatBar(wrap, sample) {
+    if (wrap.children.length >= HEARTBEAT_SLOTS) wrap.removeChild(wrap.firstChild);
+    const bar = document.createElement("span");
+    bar.className = "hb-bar is-new";
+    bar.style.height = "4px";
+    bar.dataset.rating = "none";
+    wrap.appendChild(bar);
+    requestAnimationFrame(() => applyHeartbeatBar(bar, sample));
+  }
+
+  function sharedHeartbeatPrefix(prev, samples) {
+    const limit = Math.min(prev.length, samples.length);
+    for (let i = 0; i < limit; i++) {
+      if (prev[i]?.ts !== samples[i]?.ts) return i;
+    }
+    return limit;
+  }
+
+  function renderLive(now, recent) {
+    const wrap = $("heartbeat");
+    const samples = (recent || []).slice(-HEARTBEAT_SLOTS);
 
     const last = samples.length ? samples[samples.length - 1] : null;
     const liveEl = $("live-ping");
@@ -462,6 +483,26 @@
       liveEl.dataset.rating = "none";
       setText("live-ping-time", dash);
     }
+
+    if (!wrap) return;
+    if (!samples.length) {
+      rebuildHeartbeat(wrap, []);
+      state.heartbeatSamples = [];
+      return;
+    }
+
+    if (last && state.heartbeatSamples.length && state.heartbeatSamples.at(-1)?.ts === last.ts) return;
+
+    const prev = state.heartbeatSamples;
+    const prefix = sharedHeartbeatPrefix(prev, samples);
+    const canScroll = prev.length > 0 && prefix === prev.length && samples.length > prefix;
+
+    if (canScroll) {
+      for (const sample of samples.slice(prefix)) scrollHeartbeatBar(wrap, sample);
+    } else {
+      rebuildHeartbeat(wrap, samples);
+    }
+    state.heartbeatSamples = samples;
   }
 
   /* ---------- narrative ---------- */
@@ -673,21 +714,34 @@
     });
   }
 
+  function chartLineSamples(payload) {
+    const downsampled = payload.samples || [];
+    const recent = payload.recent_samples || [];
+    const rawCount = payload.sample_count_raw ?? downsampled.length;
+    if (!recent.length || rawCount <= downsampled.length) return downsampled;
+    if (!downsampled.length) return recent;
+
+    const lastBucketMs = new Date(downsampled[downsampled.length - 1].ts).valueOf();
+    const tail = recent.filter((s) => new Date(s.ts).valueOf() >= lastBucketMs);
+    if (!tail.length) return downsampled;
+    return downsampled.slice(0, -1).concat(tail);
+  }
+
   function updateCharts(payload) {
     if (!window.Chart) return;
-    const samples = payload.samples || [];
+    const lineSamples = chartLineSamples(payload);
     const blocks = payload.blocks || { buckets: [] };
     const now = payload.now || {};
 
     /* latency */
     if (charts.latency) {
-      const points = samples.map((s) => ({ x: new Date(s.ts).valueOf(), y: s.success ? s.latency_ms : null }));
+      const points = lineSamples.map((s) => ({ x: new Date(s.ts).valueOf(), y: s.success ? s.latency_ms : null }));
       charts.latency.data.datasets[0].data = points;
       const baseline = now.baseline_ms;
-      if (baseline != null && samples.length) {
+      if (baseline != null && lineSamples.length) {
         charts.latency.data.datasets[1].data = [
-          { x: new Date(samples[0].ts).valueOf(), y: baseline },
-          { x: new Date(samples[samples.length - 1].ts).valueOf(), y: baseline },
+          { x: new Date(lineSamples[0].ts).valueOf(), y: baseline },
+          { x: new Date(lineSamples[lineSamples.length - 1].ts).valueOf(), y: baseline },
         ];
       } else {
         charts.latency.data.datasets[1].data = [];
@@ -697,9 +751,14 @@
 
     /* jitter */
     if (charts.jitter) {
-      charts.jitter.data.datasets[0].data = samples.map((s) => ({ x: new Date(s.ts).valueOf(), y: s.jitter_ms ?? null }));
+      charts.jitter.data.datasets[0].data = lineSamples.map((s) => ({
+        x: new Date(s.ts).valueOf(),
+        y: s.jitter_ms ?? null,
+      }));
       charts.jitter.update("none");
     }
+
+    const samples = payload.samples || [];
 
     /* loss per minute */
     if (charts.loss) {
@@ -751,43 +810,60 @@
   }
 
   /* =====================================================================
-     DATA APPLY
+     DATA APPLY — single path for live + full refreshes
      ===================================================================== */
-  function applyLive(payload) {
-    const now = payload.now || {};
-    renderHero(now);
-    renderStatus(now);
-    renderIndicators(now, payload.recent_samples);
-    renderLive(now, payload.recent_samples);
-    renderNarrative(now);
-    state.lastUpdatedAt = Date.now();
-    updateStaleness();
-    const has = Boolean((payload.recent_samples || []).length);
-    setStatusPill(has ? "live" : "waiting", has ? "Live" : "Waiting for data...");
+  function recentSamples(payload) {
+    return payload.recent_samples || payload.samples || [];
   }
 
-  function applyFull(payload) {
+  /** Widgets that can refresh on every ping poll (live endpoint). */
+  function renderLiveSections(payload) {
     const now = payload.now || {};
-    const windowMins = payload.window_minutes ?? state.windowMinutes;
-    setText("window-label", String(windowMins));
-
+    const samples = recentSamples(payload);
     renderHero(now);
     renderStatus(now);
-    renderIndicators(now, payload.recent_samples);
-    renderLive(now, payload.recent_samples || payload.samples);
+    renderIndicators(now, samples);
+    renderLive(now, samples);
     renderNarrative(now);
+    updateIndicatorSparklines(now, samples);
+  }
+
+  /** Window charts/tables — only present on the full metrics payload. */
+  function renderGraphSections(payload) {
+    const windowMins = payload.window_minutes ?? state.windowMinutes;
+    setText("window-label", String(windowMins));
     renderStats(payload.stats);
     renderHealth(payload.health);
     renderTimeline(payload.blocks);
     renderOutages(payload.outages);
-    renderRecent(payload.recent_samples || payload.samples);
+    renderRecent(recentSamples(payload));
     updateCharts(payload);
+  }
 
+  function applyMetrics(payload, { full = false } = {}) {
+    renderLiveSections(payload);
+
+    if (full) {
+      renderGraphSections(payload);
+      state.lastFullRefreshAt = Date.now();
+    }
+
+    state.lastSampleTs = payload.latest_ts ?? state.lastSampleTs;
     state.lastUpdatedAt = Date.now();
-    state.lastFullRefreshAt = Date.now();
     updateStaleness();
-    const has = Boolean((payload.samples || []).length);
+    const has = Boolean(recentSamples(payload).length || (payload.samples || []).length);
     setStatusPill(has ? "live" : "waiting", has ? "Live" : "Waiting for data...");
+  }
+
+  function graphRefreshDue() {
+    return Boolean(
+      state.lastFullRefreshAt
+      && Date.now() - state.lastFullRefreshAt >= state.fullRefreshMs,
+    );
+  }
+
+  function needFullRefresh(forceFull) {
+    return forceFull || !state.lastFullRefreshAt || graphRefreshDue();
   }
 
   /* =====================================================================
@@ -801,27 +877,18 @@
 
   async function poll(forceFull) {
     try {
-      if (document.hidden && !forceFull) {
-        const live = await fetchJson(`/api/metrics/live${state.lastSampleTs ? `?knownTs=${encodeURIComponent(state.lastSampleTs)}` : ""}`);
-        if (!live.unchanged && live.latest_ts) state.lastSampleTs = live.latest_ts;
-        return;
-      }
-
-      const needFull = forceFull || !state.lastFullRefreshAt || Date.now() - state.lastFullRefreshAt >= state.fullRefreshMs;
-      if (needFull) {
+      const full = needFullRefresh(forceFull);
+      if (full) {
         const params = new URLSearchParams({ windowMinutes: String(state.windowMinutes) });
-        if (!forceFull && state.lastSampleTs) params.set("knownTs", state.lastSampleTs);
         const payload = await fetchJson(`/api/metrics?${params.toString()}`);
-        if (payload.unchanged) { state.lastFullRefreshAt = Date.now(); return; }
-        state.lastSampleTs = payload.latest_ts ?? null;
-        applyFull(payload);
+        applyMetrics(payload, { full: true });
         return;
       }
 
-      const live = await fetchJson(`/api/metrics/live${state.lastSampleTs ? `?knownTs=${encodeURIComponent(state.lastSampleTs)}` : ""}`);
+      const knownTs = state.lastSampleTs ? `?knownTs=${encodeURIComponent(state.lastSampleTs)}` : "";
+      const live = await fetchJson(`/api/metrics/live${knownTs}`);
       if (live.unchanged) return;
-      state.lastSampleTs = live.latest_ts ?? null;
-      applyLive(live);
+      applyMetrics(live, { full: false });
     } catch (err) {
       console.error(err);
       setStatusPill("error", "Connection error");
@@ -841,10 +908,25 @@
     }
   }
 
+  function nextPollDelayMs() {
+    const pingDelay = state.pollIntervalMs;
+    if (!state.lastFullRefreshAt) return pingDelay;
+    const untilGraph = state.fullRefreshMs - (Date.now() - state.lastFullRefreshAt);
+    if (untilGraph <= 0) return 0;
+    return Math.min(pingDelay, untilGraph);
+  }
+
   function schedulePoll() {
     clearTimeout(state.pollTimer);
-    const interval = document.hidden ? state.pollIntervalMs * state.hiddenMultiplier : state.pollIntervalMs;
-    state.pollTimer = setTimeout(async () => { await poll(false); schedulePoll(); }, interval);
+    state.pollTimer = setTimeout(async () => { await poll(false); schedulePoll(); }, nextPollDelayMs());
+  }
+
+  function resumeDashboard() {
+    clearTimeout(state.pollTimer);
+    poll(true).finally(() => {
+      schedulePoll();
+      resizeCharts();
+    });
   }
   function scheduleConnection() {
     clearTimeout(state.connTimer);
@@ -870,13 +952,16 @@
   }
 
   function applyConfig(config) {
+    const prevFullRefreshMs = state.fullRefreshMs;
     state.config = config;
     setText("target-label", config.target || dash);
     populateWindowOptions(config.window_options && config.window_options.length ? config.window_options : [5, 15, 30, 60, 120], config.default_window_minutes || 30);
     state.pollIntervalMs = Math.max(250, (config.ping_interval_seconds || 1) * 1000);
     if (config.full_refresh_seconds != null) state.fullRefreshMs = config.full_refresh_seconds * 1000;
     if (config.connection_refresh_seconds != null) state.connRefreshMs = config.connection_refresh_seconds * 1000;
-    if (config.hidden_poll_multiplier != null) state.hiddenMultiplier = config.hidden_poll_multiplier;
+    if (prevFullRefreshMs !== state.fullRefreshMs) state.lastFullRefreshAt = 0;
+    schedulePoll();
+    scheduleConnection();
   }
 
   /* =====================================================================
@@ -905,7 +990,6 @@
       pingInterval: $("set-ping-interval"),
       fullRefresh: $("set-full-refresh"),
       connRefresh: $("set-conn-refresh"),
-      hiddenMult: $("set-hidden-mult"),
       logAge: $("set-log-age"),
     };
 
@@ -918,7 +1002,6 @@
       fields.pingInterval.value = c.ping_interval_seconds ?? state.pollIntervalMs / 1000;
       fields.fullRefresh.value = c.full_refresh_seconds ?? state.fullRefreshMs / 1000;
       fields.connRefresh.value = c.connection_refresh_seconds ?? state.connRefreshMs / 1000;
-      fields.hiddenMult.value = c.hidden_poll_multiplier ?? state.hiddenMultiplier;
       fields.logAge.value = c.max_log_age_minutes ?? 180;
       errorEl.textContent = "";
       modal.hidden = false;
@@ -944,7 +1027,6 @@
         ping_interval_seconds: Number(fields.pingInterval.value),
         full_refresh_seconds: Number(fields.fullRefresh.value),
         connection_refresh_seconds: Number(fields.connRefresh.value),
-        hidden_poll_multiplier: Math.round(Number(fields.hiddenMult.value)),
         max_log_age_minutes: Math.round(Number(fields.logAge.value)),
       };
       const saveBtn = $("settings-save");
@@ -961,7 +1043,6 @@
           return;
         }
         applyConfig(await res.json());
-        scheduleConnection();
         close();
         poll(true);
       } catch (err) {
@@ -991,7 +1072,6 @@
         onLayoutApplied: resizeCharts,
       });
     }
-    buildHeartbeat();
     try { initCharts(); } catch (err) { console.error("chart init failed", err); }
     initSettings();
 
@@ -1016,8 +1096,7 @@
     resizeCharts();
 
     document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) { poll(true); }
-      schedulePoll();
+      if (!document.hidden) resumeDashboard();
     });
   }
 

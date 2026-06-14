@@ -770,7 +770,8 @@ body[data-layout-edit="true"] .dashboard-panel.is-panel-drop-target > .indicator
 .live-label { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-3); }
 
 .heartbeat { display: flex; align-items: flex-end; gap: 2px; height: var(--heartbeat-height); }
-.hb-bar { flex: 1 1 0; min-width: 2px; border-radius: 2px 2px 1px 1px; background: var(--none); opacity: 0.85; transition: height 0.2s; }
+.hb-bar { flex: 1 1 0; min-width: 2px; border-radius: 2px 2px 1px 1px; background: var(--none); opacity: 0.85; }
+.hb-bar.is-new { transition: height 0.2s ease; }
 .hb-bar[data-rating="great"] { background: var(--great); }
 .hb-bar[data-rating="good"]  { background: var(--good); }
 .hb-bar[data-rating="okay"]  { background: var(--okay); }

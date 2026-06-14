@@ -11,15 +11,12 @@ from pydantic import BaseModel, Field, field_validator
 
 from src.config import (
     BUNDLE_ROOT,
-    MAX_HIDDEN_POLL_MULTIPLIER,
     MAX_LOG_AGE_MINUTES,
     MAX_PING_INTERVAL_SECONDS,
     MAX_REFRESH_SECONDS,
-    MIN_HIDDEN_POLL_MULTIPLIER,
     MIN_LOG_AGE_MINUTES,
     MIN_PING_INTERVAL_SECONDS,
     MIN_REFRESH_SECONDS,
-    clamp_hidden_poll_multiplier,
     clamp_log_age_minutes,
     clamp_ping_interval_seconds,
     clamp_refresh_seconds,
@@ -74,19 +71,21 @@ class MetricsCache:
 
     def get(self, kind: str, window: int, latest_ts: str | None, builder) -> dict:
         key = (kind, window)
-        with self._lock:
-            cached = self._entries.get(key)
-            if cached and cached[0] == latest_ts:
-                return cached[1]
+        if kind == "live":
+            with self._lock:
+                cached = self._entries.get(key)
+                if cached and cached[0] == latest_ts:
+                    return cached[1]
 
         payload = builder()
-        with self._lock:
-            # `window` is user-controlled (1-1440); evict entries built for an
-            # older sample so the cache stays bounded to the current payloads.
-            stale_keys = [k for k, (ts, _) in self._entries.items() if ts != latest_ts]
-            for stale_key in stale_keys:
-                del self._entries[stale_key]
-            self._entries[key] = (latest_ts, payload)
+        if kind == "live":
+            with self._lock:
+                # `window` is user-controlled (1-1440); evict entries built for an
+                # older sample so the cache stays bounded to the current payloads.
+                stale_keys = [k for k, (ts, _) in self._entries.items() if ts != latest_ts]
+                for stale_key in stale_keys:
+                    del self._entries[stale_key]
+                self._entries[key] = (latest_ts, payload)
         return payload
 
 
@@ -107,9 +106,6 @@ class SettingsUpdate(BaseModel):
     )
     connection_refresh_seconds: float | None = Field(
         default=None, ge=MIN_REFRESH_SECONDS, le=MAX_REFRESH_SECONDS
-    )
-    hidden_poll_multiplier: int | None = Field(
-        default=None, ge=MIN_HIDDEN_POLL_MULTIPLIER, le=MAX_HIDDEN_POLL_MULTIPLIER
     )
     max_log_age_minutes: int | None = Field(
         default=None, ge=MIN_LOG_AGE_MINUTES, le=MAX_LOG_AGE_MINUTES
@@ -248,7 +244,6 @@ def _config_payload() -> dict:
         "window_options": compute_window_options(config.max_log_age_minutes),
         "full_refresh_seconds": config.full_refresh_seconds,
         "connection_refresh_seconds": config.connection_refresh_seconds,
-        "hidden_poll_multiplier": config.hidden_poll_multiplier,
     }
 
 
@@ -269,8 +264,6 @@ async def api_update_config(update: SettingsUpdate):
         config.connection_refresh_seconds = clamp_refresh_seconds(
             update.connection_refresh_seconds
         )
-    if update.hidden_poll_multiplier is not None:
-        config.hidden_poll_multiplier = clamp_hidden_poll_multiplier(update.hidden_poll_multiplier)
     if update.max_log_age_minutes is not None:
         config.max_log_age_minutes = clamp_log_age_minutes(update.max_log_age_minutes)
 

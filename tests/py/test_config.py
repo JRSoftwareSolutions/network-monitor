@@ -8,7 +8,6 @@ from src.config import (
     MIN_LOG_AGE_MINUTES,
     MIN_PING_INTERVAL_SECONDS,
     clamp_default_window_minutes,
-    clamp_hidden_poll_multiplier,
     clamp_log_age_minutes,
     clamp_ping_interval_seconds,
     clamp_refresh_seconds,
@@ -27,11 +26,6 @@ def test_clamp_ping_interval_seconds():
 def test_clamp_refresh_seconds():
     assert clamp_refresh_seconds(0.5) == 1.0
     assert clamp_refresh_seconds(9999) == 3600.0
-
-
-def test_clamp_hidden_poll_multiplier():
-    assert clamp_hidden_poll_multiplier(0) == 1
-    assert clamp_hidden_poll_multiplier(100) == 60
 
 
 def test_clamp_log_age_minutes():

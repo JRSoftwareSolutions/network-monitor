@@ -103,7 +103,6 @@ Plus:
 - Live tab title (`28 ms · Good to game`) and a favicon dot that recolors with the verdict, so the tab works as a background monitor
 - Poll interval matches `ping_interval_seconds` from config; lightweight `/api/metrics/live` checks use `knownTs` so full metrics load only when a new sample is available
 - Connection info refreshes every 2 minutes (cached server-side for 5 minutes)
-- Background tab polling slows to 5× the normal interval
 - Rolling window options derived from `max_log_age_minutes`; selection saved in browser `localStorage`
 - "Updated Xs ago" staleness indicator
 
