@@ -1,5 +1,4 @@
 const WINDOW_STORAGE_KEY = "networkMonitor.windowMinutes";
-const FILL_MODE_STORAGE_KEY = "networkMonitor.fillMode";
 const DASHBOARD_VIEW_STORAGE_KEY = "networkMonitor.dashboardView";
 const PANEL_PREFS_STORAGE_KEY = "networkMonitor.panelPrefs";
 const CUSTOM_VIEWS_STORAGE_KEY = "networkMonitor.customViews";
@@ -44,6 +43,38 @@ const CHART_COLORS = {
 const CHART_GRID = "rgba(126, 164, 222, 0.08)";
 const CHART_TICK = "#5f7396";
 const MONO_FONT = "'JetBrains Mono', Consolas, monospace";
+
+const RATING_PIE_COLORS = [
+  `${LEVEL_COLORS.great}cc`,
+  `${LEVEL_COLORS.good}cc`,
+  `${LEVEL_COLORS.okay}cc`,
+  `${LEVEL_COLORS.bad}cc`,
+  `${LEVEL_COLORS.offline}cc`,
+];
+
+const QUALITY_PIE_COLORS = [
+  "rgba(61, 255, 162, 0.82)",
+  "rgba(255, 194, 77, 0.82)",
+  "rgba(255, 93, 108, 0.82)",
+  "rgba(143, 163, 194, 0.22)",
+];
+
+const BLOCKS_PANEL_LIVE = {
+  title: (windowMins) => `Latency blocks (last ${windowMins} min)`,
+  subtitle: "1-minute candles — green is good, amber is fair, red is poor (latency + jitter + loss)",
+};
+
+const BLOCKS_PANEL_HISTORY = {
+  title: "Connection quality timeline",
+  subtitle: "Each cell = 1 minute · green / amber / red = good / fair / poor",
+};
+
+/* Spike detection (mirrors src/metrics_verdict.py) */
+const NOW_WINDOW_SECONDS = 120;
+const BASELINE_SECONDS = 60;
+const MIN_BASELINE_SAMPLES = 5;
+const SPIKE_FACTOR = 2.5;
+const SPIKE_MIN_DELTA_MS = 80;
 
 /* ---------- rating model (mirrors backend thresholds) ---------- */
 

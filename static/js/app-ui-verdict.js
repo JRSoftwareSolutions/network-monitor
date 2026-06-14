@@ -75,7 +75,7 @@ function updateTrend(trend) {
 
   const delta = trend?.latency_delta_ms;
   if ((direction === "improving" || direction === "degrading") && delta != null && Math.abs(delta) >= 1) {
-    const sign = delta > 0 ? "+" : "âˆ’";
+    const sign = delta > 0 ? "+" : "−";
     trendDelta.hidden = false;
     trendDelta.textContent = `${sign}${Math.abs(delta).toFixed(0)} ms vs prior 10 min`;
   } else {
@@ -186,13 +186,8 @@ function updateWindowSummary(health, stats, outages, windowMinutes) {
   tweenNumber(baselineValue, avgLatency, { decimals: 0 });
   setArc(avgLatency);
 
-  if (heroKicker) {
-    for (const node of heroKicker.childNodes) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        node.textContent = ` window summary · last ${windowMinutes} min`;
-        break;
-      }
-    }
+  if (heroKickerText) {
+    heroKickerText.textContent = `window summary · last ${windowMinutes} min`;
   }
   if (readoutCaption) {
     readoutCaption.innerHTML = "window avg latency";
@@ -204,10 +199,6 @@ function updateWindowSummary(health, stats, outages, windowMinutes) {
     document.title = `${label} · Network Monitor`;
   }
   setFavicon(HEALTH_TO_RATING[level] ?? level);
-}
-
-function isHistoryView() {
-  return ViewBuilder.isHistoryView();
 }
 
 function needsHistoryVisualizations(view) {

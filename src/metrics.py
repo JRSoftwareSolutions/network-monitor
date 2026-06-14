@@ -7,4 +7,4 @@
 from src.metrics_store import *  # noqa: F403
 from src.metrics_log import *  # noqa: F403
 from src.metrics_verdict import *  # noqa: F403
-from src.metrics_time import _parse_ts, clamp_window_minutes  # noqa: F401
+from src.metrics_time import _parse_ts, clamp_window_minutes, sort_samples_by_ts  # noqa: F401

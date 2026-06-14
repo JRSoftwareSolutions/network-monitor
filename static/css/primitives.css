@@ -1,0 +1,156 @@
+/* =====================================================================
+   Shared UI primitives — toolbar buttons, overlays, rating accents
+   Visibility patterns (utilities layer):
+   - display:none via [hidden] / .is-panel-hidden — popovers, dialogs, panels
+   - visibility:hidden via .chip--slot[hidden] — preserves layout width for chips
+   ===================================================================== */
+
+@layer primitives {
+  /* ---------- toolbar buttons ---------- */
+
+  :is(.fill-toggle, .settings-toggle, .layout-toggle) {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    background: var(--input-bg);
+    color: var(--muted);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-md);
+    padding: 0.42rem 0.75rem;
+    font-family: var(--font-ui);
+    font-size: 0.85rem;
+    font-weight: 500;
+    line-height: 1.2;
+    cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .layout-toggle {
+    gap: 0.35rem;
+    padding: 0.35rem 0.65rem;
+    font-size: 0.74rem;
+    border-color: var(--border);
+    background: rgba(255, 255, 255, 0.03);
+  }
+
+  :is(.fill-toggle-icon, .settings-toggle-icon, .layout-toggle-icon) {
+    flex-shrink: 0;
+    opacity: 0.8;
+  }
+
+  .layout-toggle-icon {
+    opacity: 1;
+  }
+
+  :is(.fill-toggle, .settings-toggle, .layout-toggle):hover {
+    color: var(--text);
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border-strong));
+  }
+
+  .layout-toggle:hover {
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+  }
+
+  :is(.fill-toggle, .settings-toggle, .layout-toggle):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 1px;
+  }
+
+  .fill-toggle[aria-pressed="true"],
+  .settings-toggle[aria-expanded="true"],
+  .layout-toggle[aria-expanded="true"] {
+    color: var(--accent);
+    border-color: color-mix(in srgb, var(--accent) 60%, transparent);
+    background: color-mix(in srgb, var(--accent) 12%, var(--input-bg));
+    box-shadow: 0 0 20px -6px color-mix(in srgb, var(--accent) 70%, transparent);
+  }
+
+  .layout-toggle[aria-expanded="true"] {
+    color: var(--text);
+    border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+    background: color-mix(in srgb, var(--accent) 8%, transparent);
+    box-shadow: none;
+  }
+
+  .fill-toggle[aria-pressed="true"] .fill-toggle-icon,
+  .settings-toggle[aria-expanded="true"] .settings-toggle-icon {
+    opacity: 1;
+  }
+
+  /* ---------- overlay close buttons ---------- */
+
+  :is(.metric-popover__close, .settings-popover__close, .layout-dialog__close) {
+    flex-shrink: 0;
+    width: 1.75rem;
+    height: 1.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    background: rgba(255, 255, 255, 0.03);
+    color: var(--muted);
+    font-size: 1.1rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: color 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+  }
+
+  :is(.metric-popover__close, .settings-popover__close, .layout-dialog__close):hover {
+    color: var(--text);
+    border-color: var(--border-strong);
+    background: rgba(255, 255, 255, 0.06);
+  }
+
+  /* ---------- overlay panel shell ---------- */
+
+  :is(.metric-popover__panel, .settings-popover__panel) {
+    background: var(--popover-gradient);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--popover-shadow);
+    animation: overlay-panel-in 0.18s ease-out;
+  }
+
+  @keyframes overlay-panel-in {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.98);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  /* ---------- rating-accent surfaces ---------- */
+
+  .metric-popover__panel[data-rating] {
+    border-color: color-mix(in srgb, var(--rating) 38%, var(--border-strong));
+    box-shadow:
+      0 0 60px -20px color-mix(in srgb, var(--rating) 30%, transparent),
+      0 24px 48px -24px rgba(0, 0, 0, 0.95);
+  }
+
+  .metric-popover__panel[data-rating] .metric-popover__title {
+    color: var(--rating);
+  }
+
+  /* ---------- live ping value ---------- */
+
+  .live-ticker-ping {
+    font-size: 2.9rem;
+    font-weight: 800;
+    line-height: 1;
+    color: var(--rating);
+    text-shadow: 0 0 22px color-mix(in srgb, var(--rating) 50%, transparent);
+    transition: color 0.2s ease, text-shadow 0.2s ease;
+  }
+}
+
+@layer utilities {
+  [data-panel].is-panel-hidden,
+  .tables-grid.is-panel-hidden,
+  .layout-confirm-strip[hidden],
+  .status-pending[hidden] {
+    display: none;
+  }
+}

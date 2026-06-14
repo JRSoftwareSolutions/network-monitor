@@ -87,13 +87,20 @@ function updateQualityTimeline(blocksPayload, outages, windowMinutes, latestTs) 
       ]
         .filter(Boolean)
         .join(" ");
+      const tsMs = new Date(bucket.ts_start).getTime();
 
-      return `<div class="${classes}" title="${formatBucketTooltip(bucket).replace(/"/g, "&quot;")}"></div>`;
+      return `<div class="${classes}" data-ts-ms="${tsMs}" title="${formatBucketTooltip(bucket).replace(/"/g, "&quot;")}"></div>`;
     })
     .join("");
 
   qualityTimeline.dataset.windowMinutes = String(windowMinutes);
   qualityTimeline.dataset.latestTs = latestTs ?? "";
+
+  const activeTs = pinnedMinuteTsMs ?? highlightedMinuteTsMs;
+  if (activeTs != null) {
+    highlightedMinuteTsMs = null;
+    setHighlightedMinute(activeTs);
+  }
 }
 
 function updateQualityBreakdown(blocksPayload) {
@@ -159,18 +166,7 @@ function updateDistributionChart(samples) {
     return;
   }
 
-  const counts = { great: 0, good: 0, okay: 0, bad: 0, failed: 0 };
-  for (const sample of samples ?? []) {
-    if (!sample.success) {
-      counts.failed += 1;
-      continue;
-    }
-    if (sample.latency_ms == null) {
-      continue;
-    }
-    counts[rateMetric("ping", sample.latency_ms)] += 1;
-  }
-
+  const counts = countLatencyTiers(samples);
   const data = DISTRIBUTION_LABELS.map((label) => counts[label] ?? 0);
   const total = data.reduce((sum, value) => sum + value, 0);
   distributionChart.$distributionTotal = total;
@@ -438,22 +434,8 @@ function setHistoryPieChart(chart, counts, keys, colors) {
 }
 
 function updateHistoryPieCharts(samples, blocks) {
-  const ratingPieColors = [
-    `${LEVEL_COLORS.great}cc`,
-    `${LEVEL_COLORS.good}cc`,
-    `${LEVEL_COLORS.okay}cc`,
-    `${LEVEL_COLORS.bad}cc`,
-    `${LEVEL_COLORS.offline}cc`,
-  ];
-  const qualityPieColors = [
-    "rgba(61, 255, 162, 0.82)",
-    "rgba(255, 194, 77, 0.82)",
-    "rgba(255, 93, 108, 0.82)",
-    "rgba(143, 163, 194, 0.22)",
-  ];
-
   const latencyCounts = countLatencyTiers(samples);
-  setHistoryPieChart(historyLatencyPie, latencyCounts, DISTRIBUTION_LABELS, ratingPieColors);
+  setHistoryPieChart(historyLatencyPie, latencyCounts, DISTRIBUTION_LABELS, RATING_PIE_COLORS);
   if (historyPieCaptions.latency) {
     historyPieCaptions.latency.textContent = dominantTierCaption(
       latencyCounts,
@@ -463,7 +445,7 @@ function updateHistoryPieCharts(samples, blocks) {
   }
 
   const jitterCounts = countJitterTiers(samples);
-  setHistoryPieChart(historyJitterPie, jitterCounts, RATING_ORDER, ratingPieColors);
+  setHistoryPieChart(historyJitterPie, jitterCounts, RATING_ORDER, RATING_PIE_COLORS);
   if (historyPieCaptions.jitter) {
     historyPieCaptions.jitter.textContent = dominantTierCaption(
       jitterCounts,
@@ -473,7 +455,7 @@ function updateHistoryPieCharts(samples, blocks) {
   }
 
   const lossCounts = countLossTiers(blocks);
-  setHistoryPieChart(historyLossPie, lossCounts, RATING_ORDER, ratingPieColors);
+  setHistoryPieChart(historyLossPie, lossCounts, RATING_ORDER, RATING_PIE_COLORS);
   if (historyPieCaptions.loss) {
     historyPieCaptions.loss.textContent = dominantTierCaption(
       lossCounts,
@@ -483,7 +465,7 @@ function updateHistoryPieCharts(samples, blocks) {
   }
 
   const qualityCounts = countQualityTiers(blocks);
-  setHistoryPieChart(historyQualityPie, qualityCounts, ["good", "fair", "poor", "empty"], qualityPieColors);
+  setHistoryPieChart(historyQualityPie, qualityCounts, ["good", "fair", "poor", "empty"], QUALITY_PIE_COLORS);
   if (historyPieCaptions.quality) {
     historyPieCaptions.quality.textContent = dominantTierCaption(
       qualityCounts,
@@ -505,12 +487,7 @@ function applyHistoryVisualizations(payload) {
   } = payload;
   const windowMins = windowMinutes ?? getWindowMinutes();
 
-  if (blocksPanelTitle) {
-    blocksPanelTitle.textContent = "Connection quality timeline";
-  }
-  if (blocksPanelSubtitle) {
-    blocksPanelSubtitle.textContent = "Each cell = 1 minute · green / amber / red = good / fair / poor";
-  }
+  applyBlocksPanelCopy("history", windowMins);
 
   const latencyPanelTitle = document.querySelector('[data-panel="latency"] h2');
   if (latencyPanelTitle) {
@@ -520,12 +497,14 @@ function applyHistoryVisualizations(payload) {
   updateWindowSummary(health, stats, outages, windowMins);
   updateQualityTimeline(blocks, outages, windowMins, latestTs);
   updateQualityBreakdown(blocks);
+  updateStatSparklines(blocks);
   updateHistoryPieCharts(samples, blocks);
   updateDistributionChart(samples);
   updateWindowInsights({ stats, health, outages, blocks });
   updateWorstMinutesTable(blocks);
   updateBestMinutesTable(blocks);
   updateMinuteLogTable(blocks);
+  updateAnalyticsCharts?.(payload);
 }
 
 function updateHealthChip(health, stats) {
@@ -553,7 +532,7 @@ function updateHealthChip(health, stats) {
 }
 
 function updateRecentTable(samples, { limit = 20 } = {}) {
-  const recent = samples.slice(-limit).reverse();
+  const recent = (samples ?? []).slice(-limit).reverse();
   if (!recent.length) {
     recentTable.innerHTML = '<tr><td colspan="4" class="empty">Waiting for data…</td></tr>';
     return;
@@ -622,6 +601,335 @@ function updateStalenessIndicator() {
     updatedIndicator.className = "updated-indicator updated-indicator--warn";
   } else {
     updatedIndicator.className = "updated-indicator";
+  }
+}
+
+/* ---------- stat sparklines ---------- */
+
+const STAT_SPARKLINES = {
+  "avg-latency": { field: "avg_ms", color: CHART_COLORS.latency },
+  "avg-jitter": { field: "jitter_avg_ms", color: CHART_COLORS.jitter },
+  "packet-loss": { field: "loss_pct", color: CHART_COLORS.loss, ceiling: 15 },
+};
+
+function drawStatSparkline(canvas, values, color, ceiling = null) {
+  if (!canvas) {
+    return;
+  }
+  const ctx = canvas.getContext("2d");
+  const width = canvas.clientWidth;
+  const height = canvas.clientHeight;
+  if (!width || !height) {
+    return;
+  }
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = Math.round(width * dpr);
+  canvas.height = Math.round(height * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, width, height);
+
+  const points = values.filter((value) => value != null);
+  if (points.length < 2) {
+    return;
+  }
+
+  const maxY = ceiling ?? Math.max(...points, 1);
+  const padY = 1;
+  const usableH = height - padY * 2;
+  const hex = color.startsWith("#") ? color.slice(1) : null;
+  const fillColor = hex
+    ? `rgba(${parseInt(hex.slice(0, 2), 16)}, ${parseInt(hex.slice(2, 4), 16)}, ${parseInt(hex.slice(4, 6), 16)}, 0.14)`
+    : "rgba(69, 200, 255, 0.14)";
+
+  const plotY = (value, index) => {
+    const x = (index / (points.length - 1)) * width;
+    const y = height - padY - (value / maxY) * usableH;
+    return { x, y };
+  };
+
+  ctx.beginPath();
+  points.forEach((value, index) => {
+    const { x, y } = plotY(value, index);
+    if (index === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+  ctx.lineTo(width, height);
+  ctx.lineTo(0, height);
+  ctx.closePath();
+  ctx.fillStyle = fillColor;
+  ctx.fill();
+
+  ctx.beginPath();
+  points.forEach((value, index) => {
+    const { x, y } = plotY(value, index);
+    if (index === 0) {
+      ctx.moveTo(x, y);
+    } else {
+      ctx.lineTo(x, y);
+    }
+  });
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.25;
+  ctx.lineJoin = "round";
+  ctx.stroke();
+}
+
+function updateStatSparklines(blocksPayload) {
+  const buckets = (blocksPayload?.buckets ?? []).filter((bucket) => bucket.sample_count > 0);
+  for (const [statId, config] of Object.entries(STAT_SPARKLINES)) {
+    const canvas = document.getElementById(`sparkline-${statId}`);
+    const values = buckets.map((bucket) => bucket[config.field] ?? null);
+    drawStatSparkline(canvas, values, config.color, config.ceiling);
+  }
+}
+
+/* ---------- quality timeline ↔ candlestick cross-highlight ---------- */
+
+let highlightedMinuteTsMs = null;
+let pinnedMinuteTsMs = null;
+let blocksCrossHighlightReady = false;
+
+function setHighlightedMinute(tsMs, { pin = false } = {}) {
+  if (pin) {
+    pinnedMinuteTsMs = pinnedMinuteTsMs === tsMs ? null : tsMs;
+    tsMs = pinnedMinuteTsMs;
+  } else if (pinnedMinuteTsMs != null) {
+    return;
+  }
+
+  if (highlightedMinuteTsMs === tsMs) {
+    return;
+  }
+  highlightedMinuteTsMs = tsMs;
+
+  if (qualityTimeline) {
+    for (const cell of qualityTimeline.querySelectorAll(".quality-timeline-cell")) {
+      const cellTs = Number(cell.dataset.tsMs);
+      cell.classList.toggle("quality-timeline-cell--highlighted", tsMs != null && cellTs === tsMs);
+    }
+  }
+
+  if (latencyBlocksChart) {
+    latencyBlocksChart.$highlightTsMs = tsMs;
+    if (tsMs != null) {
+      const index = latencyBlocksChart.data.datasets[0].data.findIndex((point) => point.x === tsMs);
+      if (index >= 0) {
+        latencyBlocksChart.setActiveElements([{ datasetIndex: 0, index }]);
+      } else {
+        latencyBlocksChart.setActiveElements([]);
+      }
+    } else {
+      latencyBlocksChart.setActiveElements([]);
+    }
+    latencyBlocksChart.update("none");
+  }
+}
+
+function initBlocksCrossHighlight() {
+  if (blocksCrossHighlightReady || !qualityTimeline) {
+    return;
+  }
+  blocksCrossHighlightReady = true;
+
+  qualityTimeline.addEventListener("mouseover", (event) => {
+    const cell = event.target.closest(".quality-timeline-cell");
+    if (!cell || pinnedMinuteTsMs != null) {
+      return;
+    }
+    setHighlightedMinute(Number(cell.dataset.tsMs));
+  });
+
+  qualityTimeline.addEventListener("mouseleave", () => {
+    if (pinnedMinuteTsMs == null) {
+      setHighlightedMinute(null);
+    }
+  });
+
+  qualityTimeline.addEventListener("click", (event) => {
+    const cell = event.target.closest(".quality-timeline-cell");
+    if (!cell) {
+      return;
+    }
+    setHighlightedMinute(Number(cell.dataset.tsMs), { pin: true });
+  });
+
+  const blocksCanvas = document.getElementById("latency-blocks-chart");
+  if (blocksCanvas && latencyBlocksChart) {
+    blocksCanvas.addEventListener("mousemove", (event) => {
+      if (pinnedMinuteTsMs != null) {
+        return;
+      }
+      const hits = latencyBlocksChart.getElementsAtEventForMode(event, "index", { intersect: false });
+      if (hits.length) {
+        const point = latencyBlocksChart.data.datasets[0].data[hits[0].index];
+        setHighlightedMinute(point?.x ?? null);
+      } else {
+        setHighlightedMinute(null);
+      }
+    });
+    blocksCanvas.addEventListener("mouseleave", () => {
+      if (pinnedMinuteTsMs == null) {
+        setHighlightedMinute(null);
+      }
+    });
+    blocksCanvas.addEventListener("click", (event) => {
+      const hits = latencyBlocksChart.getElementsAtEventForMode(event, "index", { intersect: false });
+      if (!hits.length) {
+        setHighlightedMinute(null, { pin: true });
+        return;
+      }
+      const point = latencyBlocksChart.data.datasets[0].data[hits[0].index];
+      setHighlightedMinute(point?.x ?? null, { pin: true });
+    });
+  }
+}
+
+/* ---------- window metrics export ---------- */
+
+function downloadBlob(filename, mimeType, content) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportWindowMetricsAsJson() {
+  if (!lastMetricsPayload) {
+    return;
+  }
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  downloadBlob(
+    `network-monitor-${stamp}.json`,
+    "application/json",
+    JSON.stringify(lastMetricsPayload, null, 2),
+  );
+}
+
+function exportWindowMetricsAsCsv() {
+  if (!lastMetricsPayload) {
+    return;
+  }
+  const buckets = lastMetricsPayload.blocks?.buckets ?? [];
+  const header = ["ts_start", "ts_end", "avg_ms", "low_ms", "high_ms", "jitter_avg_ms", "loss_pct", "sample_count"];
+  const rows = buckets.map((bucket) =>
+    header.map((key) => {
+      const value = bucket[key];
+      return value == null ? "" : String(value);
+    }).join(","),
+  );
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  downloadBlob(`network-monitor-minutes-${stamp}.csv`, "text/csv", [header.join(","), ...rows].join("\n"));
+}
+
+function initMetricsExport() {
+  const exportBtn = document.getElementById("export-metrics-btn");
+  if (!exportBtn) {
+    return;
+  }
+  exportBtn.addEventListener("click", (event) => {
+    if (event.shiftKey) {
+      exportWindowMetricsAsCsv();
+    } else {
+      exportWindowMetricsAsJson();
+    }
+  });
+}
+
+/* ---------- connection alerts ---------- */
+
+const VERDICT_SEVERITY = {
+  no_data: -1,
+  great: 0,
+  good: 1,
+  okay: 2,
+  bad: 3,
+  offline: 4,
+};
+
+let lastAlertVerdictLevel = null;
+let lastAlertOngoingOutages = 0;
+let alertToastTimer;
+
+function showAlertToast(message, level = "bad") {
+  const toast = document.getElementById("alert-toast");
+  const text = document.getElementById("alert-toast-text");
+  if (!toast || !text) {
+    return;
+  }
+  text.textContent = message;
+  toast.dataset.level = level;
+  toast.hidden = false;
+  clearTimeout(alertToastTimer);
+  alertToastTimer = setTimeout(() => {
+    toast.hidden = true;
+  }, 8000);
+}
+
+function pushBrowserAlert(title, body) {
+  if (!("Notification" in window) || Notification.permission !== "granted") {
+    return;
+  }
+  try {
+    new Notification(title, { body, icon: faviconLink?.href });
+  } catch {
+    // Notification API unavailable in this context.
+  }
+}
+
+function checkConnectionAlerts(now, outages) {
+  const level = now?.display_verdict?.level ?? "no_data";
+  const label = now?.display_verdict?.label ?? "Connection changed";
+  const ongoing = (outages ?? []).filter((outage) => outage.ongoing).length;
+  const prevLevel = lastAlertVerdictLevel;
+  const prevOngoing = lastAlertOngoingOutages;
+
+  if (
+    prevLevel != null &&
+    prevLevel !== "no_data" &&
+    level !== "no_data" &&
+    (VERDICT_SEVERITY[level] ?? -1) > (VERDICT_SEVERITY[prevLevel] ?? -1)
+  ) {
+    const message = `Verdict degraded to ${label}`;
+    showAlertToast(message, level);
+    pushBrowserAlert("Connection degraded", message);
+  }
+
+  if (ongoing > prevOngoing) {
+    const message = ongoing === 1 ? "Outage started — pings failing" : `${ongoing} ongoing outages`;
+    showAlertToast(message, "offline");
+    pushBrowserAlert("Network outage", message);
+  }
+
+  if (level !== "no_data") {
+    lastAlertVerdictLevel = level;
+  }
+  lastAlertOngoingOutages = ongoing;
+}
+
+function initConnectionAlerts() {
+  const toast = document.getElementById("alert-toast");
+  const closeBtn = document.getElementById("alert-toast-close");
+  closeBtn?.addEventListener("click", () => {
+    if (toast) {
+      toast.hidden = true;
+    }
+    clearTimeout(alertToastTimer);
+  });
+
+  if ("Notification" in window && Notification.permission === "default") {
+    document.body.addEventListener(
+      "click",
+      () => {
+        Notification.requestPermission().catch(() => {});
+      },
+      { once: true },
+    );
   }
 }
 

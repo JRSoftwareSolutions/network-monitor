@@ -8,6 +8,7 @@ from src.metrics_time import (
     _parse_ts,
     _percentile,
     clamp_window_minutes,
+    sort_samples_by_ts,
 )
 
 
@@ -41,7 +42,7 @@ def read_samples(log_file: Path, window_minutes: int) -> list[dict]:
             if ts >= cutoff:
                 samples.append(sample)
 
-    return samples
+    return sort_samples_by_ts(samples)
 
 
 BLOCKS_BUCKET_SECONDS = 60
@@ -59,6 +60,7 @@ def downsample_samples(
 ) -> list[dict]:
     if not samples:
         return []
+    samples = sort_samples_by_ts(samples)
     if len(samples) <= max_points:
         return samples
 

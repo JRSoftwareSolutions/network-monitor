@@ -1,65 +1,74 @@
-/* ---------- level + rating color mappings (keep last: win specificity ties) ---------- */
+/* ---------- level + rating color mappings ---------- */
 
-[data-level="great"] { --level: var(--great); }
-[data-level="good"] { --level: var(--good); }
-[data-level="okay"] { --level: var(--okay); }
-[data-level="bad"] { --level: var(--bad); }
-[data-level="offline"] { --level: var(--offline); }
-[data-level="no_data"] { --level: var(--muted); }
+@layer overrides {
+  [data-level="great"] { --level: var(--great); }
+  [data-level="good"] { --level: var(--good); }
+  [data-level="okay"] { --level: var(--okay); }
+  [data-level="bad"] { --level: var(--bad); }
+  [data-level="offline"] { --level: var(--offline); }
+  [data-level="no_data"] { --level: var(--muted); }
 
-[data-rating="great"] { --tile: var(--great); --rating: var(--great); }
-[data-rating="good"] { --tile: var(--good); --rating: var(--good); }
-[data-rating="okay"] { --tile: var(--okay); --rating: var(--okay); }
-[data-rating="bad"] { --tile: var(--bad); --rating: var(--bad); }
-[data-rating="none"] { --tile: var(--faint); --rating: var(--faint); }
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+  [data-rating="great"] { --tile: var(--great); --rating: var(--great); }
+  [data-rating="good"] { --tile: var(--good); --rating: var(--good); }
+  [data-rating="okay"] { --tile: var(--okay); --rating: var(--okay); }
+  [data-rating="bad"] { --tile: var(--bad); --rating: var(--bad); }
+  [data-rating="none"] { --tile: var(--faint); --rating: var(--faint); }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
   }
-}
 
-/* ---------- screenshot capture (html2canvas-safe overrides) ---------- */
+  @media (prefers-contrast: more) {
+    :root {
+      --border-strong: rgba(126, 164, 222, 0.42);
+    }
+  }
 
-.is-screenshot-capture,
-.is-screenshot-capture * {
-  backdrop-filter: none !important;
-  -webkit-backdrop-filter: none !important;
-  animation: none !important;
-}
+  /* ---------- screenshot capture (html2canvas-safe overrides) ---------- */
 
-.is-screenshot-capture.indicator {
-  background:
-    radial-gradient(ellipse 95% 75% at 50% -5%, color-mix(in srgb, var(--tile) 22%, transparent), transparent 62%),
-    linear-gradient(170deg, rgb(16, 24, 40), rgb(9, 13, 23));
-  box-shadow: none;
-  border-color: color-mix(in srgb, var(--tile) 32%, rgb(35, 48, 72));
-}
+  .is-screenshot-capture,
+  .is-screenshot-capture * {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    animation: none !important;
+  }
 
-.is-screenshot-capture.indicator::after {
-  display: none;
-}
+  .is-screenshot-capture.indicator {
+    background:
+      radial-gradient(ellipse 95% 75% at 50% -5%, color-mix(in srgb, var(--tile) 22%, transparent), transparent 62%),
+      linear-gradient(170deg, rgb(16, 24, 40), rgb(9, 13, 23));
+    box-shadow: none;
+    border-color: color-mix(in srgb, var(--tile) 32%, rgb(35, 48, 72));
+  }
 
-.is-screenshot-capture.panel {
-  background: linear-gradient(170deg, rgb(16, 24, 40), rgb(9, 13, 23));
-  box-shadow: none;
-}
+  .is-screenshot-capture.indicator::after {
+    display: none;
+  }
 
-.is-screenshot-capture.hero {
-  background:
-    radial-gradient(140% 200% at 0% 0%, color-mix(in srgb, var(--level) 12%, transparent), transparent 55%),
-    linear-gradient(165deg, rgb(16, 24, 40), rgb(8, 12, 22));
-  box-shadow: none;
-}
+  .is-screenshot-capture.panel {
+    background: linear-gradient(170deg, rgb(16, 24, 40), rgb(9, 13, 23));
+    box-shadow: none;
+  }
 
-.is-screenshot-capture.hero::before,
-.is-screenshot-capture .hero-sweep {
-  display: none !important;
-}
+  .is-screenshot-capture.hero {
+    background:
+      radial-gradient(140% 200% at 0% 0%, color-mix(in srgb, var(--level) 12%, transparent), transparent 55%),
+      linear-gradient(165deg, rgb(16, 24, 40), rgb(8, 12, 22));
+    box-shadow: none;
+  }
 
-.is-screenshot-capture.status-panel::before {
-  display: none;
+  .is-screenshot-capture.hero::before,
+  .is-screenshot-capture .hero-sweep {
+    display: none !important;
+  }
+
+  .is-screenshot-capture.status-panel::before {
+    display: none;
+  }
 }

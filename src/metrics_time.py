@@ -15,6 +15,13 @@ def _format_ts(dt: datetime) -> str:
     return dt.isoformat(timespec="milliseconds").replace("+00:00", "Z")
 
 
+def sort_samples_by_ts(samples: list[dict]) -> list[dict]:
+    """Return samples in chronological order (stable for equal timestamps)."""
+    if len(samples) < 2:
+        return samples
+    return sorted(samples, key=lambda sample: _parse_ts(sample["ts"]))
+
+
 def _floor_to_bucket(ts: datetime, bucket_seconds: int) -> datetime:
     epoch = int(ts.timestamp())
     bucket_start = (epoch // bucket_seconds) * bucket_seconds

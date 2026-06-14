@@ -8,10 +8,13 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700;800&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/layers.css">
   <link rel="stylesheet" href="/static/css/tokens.css">
   <link rel="stylesheet" href="/static/css/base.css">
-  <link rel="stylesheet" href="/static/css/components.css">
-  <link rel="stylesheet" href="/static/css/views.css">
+  <link rel="stylesheet" href="/static/css/primitives.css">
+  <link rel="stylesheet" href="/static/css/components-shell.css">
+  <link rel="stylesheet" href="/static/css/components-tiles.css">
+  <link rel="stylesheet" href="/static/css/components-data.css">
   <link rel="stylesheet" href="/static/css/view-builder.css">
   <link rel="stylesheet" href="/static/css/overrides.css">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -89,7 +92,7 @@
     <section class="hero" id="hero" data-panel="hero" data-level="no_data" role="status" aria-live="polite">
       <div class="hero-sweep" aria-hidden="true"></div>
       <div class="hero-verdict">
-        <span class="hero-kicker" id="hero-kicker"><span class="kicker-dot" aria-hidden="true"></span>connection status</span>
+        <span class="hero-kicker" id="hero-kicker"><span class="kicker-dot" aria-hidden="true"></span><span class="hero-kicker-text" id="hero-kicker-text">connection status</span></span>
         <h2 class="verdict-label" id="verdict-label">No data</h2>
         <p class="verdict-detail" id="verdict-detail-live">
           <span class="verdict-detail-line mono">
@@ -104,7 +107,7 @@
           </span>
         </p>
         <p class="verdict-detail verdict-detail--window" id="window-summary-detail" hidden>
-          <span class="verdict-detail-line mono" id="window-summary-narrative">—</span>
+          <span class="verdict-detail-line verdict-detail-line--narrative mono" id="window-summary-narrative">—</span>
         </p>
         <div class="hero-badges">
           <span class="hero-badge hero-badge--slot" id="verdict-since" hidden>held <span class="dyn-slot dyn-slot--duration" id="verdict-since-val">—</span></span>
@@ -293,7 +296,7 @@
       <div class="live-grid">
         <div class="live-ticker">
           <span class="live-ticker-name">last ping</span>
-          <p class="live-ticker-value"><span class="mono dyn-slot dyn-slot--live-ping" id="live-ping" data-rating="none">—</span><span class="live-ticker-unit mono">ms</span></p>
+          <p class="live-ticker-value"><span class="mono dyn-slot dyn-slot--live-ping live-ticker-ping" id="live-ping" data-rating="none">—</span><span class="live-ticker-unit mono">ms</span></p>
           <span class="live-ticker-sub mono dyn-slot dyn-slot--time" id="live-ping-sub">—</span>
         </div>
         <div class="heartbeat-wrap">
@@ -318,16 +321,17 @@
   <!-- include:overlays -->
 
   <script src="https://cdn.jsdelivr.net/npm/html2canvas-pro@1.5.8/dist/html2canvas-pro.min.js"></script>
-  <script src="/static/js/constants.js"></script>
-  <script src="/static/js/rating-format.js"></script>
-  <script src="/static/js/chart-plugins.js"></script>
-  <script src="/static/js/screenshot.js"></script>
-  <script src="/static/js/view-builder.js"></script>
-  <script src="/static/js/app-state.js"></script>
-  <script src="/static/js/app-ui-verdict.js"></script>
-  <script src="/static/js/app-ui-live.js"></script>
-  <script src="/static/js/app-charts.js"></script>
-  <script src="/static/js/app-window.js"></script>
-  <script src="/static/app.js"></script>
+  <script src="/static/js/constants.js?v=3"></script>
+  <script src="/static/js/rating-format.js?v=3"></script>
+  <script src="/static/js/chart-plugins.js?v=3"></script>
+  <script src="/static/js/screenshot.js?v=3"></script>
+  <script src="/static/js/view-builder.js?v=3"></script>
+  <script src="/static/js/app-state.js?v=3"></script>
+  <script src="/static/js/app-ui-verdict.js?v=3"></script>
+  <script src="/static/js/app-ui-live.js?v=3"></script>
+  <script src="/static/js/app-charts.js?v=3"></script>
+  <script src="/static/js/app-analytics.js?v=3"></script>
+  <script src="/static/js/app-window.js?v=3"></script>
+  <script src="/static/app.js?v=3"></script>
 </body>
 </html>

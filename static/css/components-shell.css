@@ -1,4 +1,5 @@
-﻿/* ---------- background fx ---------- */
+@layer components {
+/* ---------- background fx ---------- */
 
 .bg-glow,
 .bg-grid,
@@ -39,7 +40,7 @@
 .topbar {
   position: sticky;
   top: 0;
-  z-index: 50;
+  z-index: var(--z-topbar);
   background: rgba(5, 8, 14, 0.72);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -47,7 +48,7 @@
 }
 
 .topbar-inner {
-  max-width: 1480px;
+  max-width: var(--layout-max);
   margin: 0 auto;
   padding: 0.8rem 2rem;
   display: flex;
@@ -185,7 +186,7 @@
 /* ---------- layout ---------- */
 
 main {
-  max-width: 1480px;
+  max-width: var(--layout-max);
   margin: 0 auto;
   padding: 1.4rem 2rem 3rem;
   display: grid;
@@ -202,7 +203,7 @@ main > * {
 .hero {
   position: relative;
   display: grid;
-  grid-template-columns: 1.45fr minmax(300px, 0.9fr);
+  grid-template-columns: 1.45fr minmax(0, 0.9fr);
   align-items: center;
   gap: 1.5rem 3rem;
   padding: 1.8rem 2.2rem 1.7rem;
@@ -219,6 +220,7 @@ main > * {
     0 22px 50px -34px rgba(0, 0, 0, 0.95);
   transition: border-color 0.9s ease, box-shadow 0.9s ease, --level 0.9s ease;
   overflow: hidden;
+  min-height: min-content;
 }
 
 .hero::before {
@@ -267,14 +269,22 @@ main > * {
 }
 
 .hero-kicker {
-  display: inline-flex;
+  display: flex;
   align-items: center;
   gap: 0.5rem;
+  min-width: 0;
   text-transform: uppercase;
   letter-spacing: 0.22em;
   font-size: 0.72rem;
   font-weight: 600;
   color: var(--muted);
+}
+
+.hero-kicker-text {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .kicker-dot {
@@ -305,6 +315,8 @@ main > * {
   color: var(--level);
   text-shadow: 0 0 32px color-mix(in srgb, var(--level) 55%, transparent);
   transition: color 0.9s ease, text-shadow 0.9s ease;
+  max-width: 100%;
+  text-wrap: balance;
 }
 
 .verdict-detail {
@@ -319,6 +331,13 @@ main > * {
   align-items: baseline;
   flex-wrap: wrap;
   gap: 0.15rem 0.35rem;
+}
+
+.verdict-detail-line--narrative {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .verdict-detail-label {
@@ -399,16 +418,26 @@ main > * {
   align-items: center;
   justify-content: center;
   gap: 0.45rem;
+  min-width: 0;
+  min-height: 0;
 }
 
 .readout-arc {
   position: relative;
-  width: min(280px, 72vw);
+  flex: 1 1 auto;
+  min-height: 0;
+  width: min(280px, 72vw, 100%);
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .arc-svg {
   width: 100%;
   height: auto;
+  max-height: min(7.5rem, 100%);
   overflow: visible;
 }
 
@@ -479,6 +508,7 @@ main > * {
 
 .readout-caption {
   margin: 0;
+  flex-shrink: 0;
   text-transform: uppercase;
   letter-spacing: 0.16em;
   font-size: 0.66rem;
@@ -512,7 +542,8 @@ main > * {
   font-size: 0.72rem;
   color: var(--muted);
   transition: color 0.5s ease, border-color 0.5s ease;
-  min-width: 11rem;
+  min-width: min(11rem, 100%);
+  max-width: 100%;
   justify-content: center;
 }
 
@@ -527,7 +558,7 @@ main > * {
 }
 
 .trend-arrow::before {
-  content: "…";
+  content: "?";
 }
 
 .readout-trend[data-trend="improving"] {
@@ -536,7 +567,7 @@ main > * {
 }
 
 .readout-trend[data-trend="improving"] .trend-arrow::before {
-  content: "â†—";
+  content: "\2197";
 }
 
 .readout-trend[data-trend="degrading"] {
@@ -545,7 +576,7 @@ main > * {
 }
 
 .readout-trend[data-trend="degrading"] .trend-arrow::before {
-  content: "â†˜";
+  content: "\2198";
 }
 
 .readout-trend[data-trend="steady"] {
@@ -553,7 +584,7 @@ main > * {
 }
 
 .readout-trend[data-trend="steady"] .trend-arrow::before {
-  content: "â†’";
+  content: "\2192";
 }
 
 /* ---------- current status narrative ---------- */
@@ -668,7 +699,7 @@ main > * {
   margin: 0.85rem 0 0;
   font-size: 0.92rem;
   line-height: 1.55;
-  color: #c7d4ea;
+  color: var(--text);
   min-height: 1.45em;
 }
 
@@ -683,19 +714,15 @@ main > * {
   margin: 0.45rem 0 0;
   min-height: 1.15rem;
   font-size: 0.78rem;
-  color: #8fa3c2;
-}
-
-.status-pending[hidden] {
-  display: none;
+  color: var(--muted);
 }
 
 .status-pending[data-direction="up"] {
-  color: #3dffa2;
+  color: var(--great);
 }
 
 .status-pending[data-direction="down"] {
-  color: #ffc24d;
+  color: var(--okay);
 }
 
 .status-pending-sec::after,
@@ -768,4 +795,4 @@ main > * {
     transform: none;
   }
 }
-
+}

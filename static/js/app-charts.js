@@ -1,5 +1,37 @@
 ﻿/* ---------- charts ---------- */
 
+function buildHistoryPieBootstrap(tooltipStyle) {
+  const historyPieTooltip = {
+    ...tooltipStyle,
+    callbacks: {
+      label(context) {
+        const count = context.raw ?? 0;
+        const total = context.chart.$pieTotal ?? 0;
+        if (!total) {
+          return "No data";
+        }
+        const pct = ((count / total) * 100).toFixed(1);
+        return `${count} (${pct}%)`;
+      },
+    },
+  };
+
+  return {
+    historyPieOptions: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      cutout: "62%",
+      plugins: {
+        legend: { display: false },
+        tooltip: historyPieTooltip,
+      },
+    },
+    ratingPieColors: RATING_PIE_COLORS,
+    qualityPieColors: QUALITY_PIE_COLORS,
+  };
+}
+
 function areaGradient(hex, topAlpha) {
   return (context) => {
     const { ctx, chartArea } = context.chart;
@@ -102,7 +134,7 @@ function initCharts() {
 
   latencyChart = new Chart(document.getElementById("latency-chart"), {
     type: "line",
-    plugins: [latencyBandsPlugin, failureStripsPlugin, outageShadingPlugin, lineGlowPlugin],
+    plugins: [latencyBandsPlugin, failureStripsPlugin, outageShadingPlugin, referenceLinesPlugin, lineGlowPlugin],
     data: {
       datasets: [
         {
@@ -118,7 +150,7 @@ function initCharts() {
           order: 1,
         },
         {
-          label: "Jitter band (Â±)",
+          label: "Jitter band (±)",
           data: [],
           borderColor: "rgba(179, 136, 255, 0)",
           backgroundColor: "rgba(179, 136, 255, 0.12)",
@@ -143,6 +175,20 @@ function initCharts() {
           spanGaps: false,
           order: 2,
         },
+        {
+          label: "60s rolling median",
+          data: [],
+          borderColor: "rgba(61, 255, 162, 0.72)",
+          backgroundColor: "rgba(61, 255, 162, 0)",
+          fill: false,
+          borderWidth: 1.5,
+          borderDash: [5, 4],
+          tension: 0.35,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          spanGaps: false,
+          order: 0,
+        },
       ],
     },
     options: {
@@ -161,8 +207,8 @@ function initCharts() {
         x: latencyTimeScale,
         y: {
           beginAtZero: true,
-          suggestedMax: 120,
-          grace: "10%",
+          suggestedMax: 40,
+          grace: 0,
           ticks: {
             ...monoTicks,
             maxTicksLimit: 4,
@@ -181,7 +227,7 @@ function initCharts() {
           callbacks: {
             afterLabel(context) {
               const jitter = context.raw?.jitter;
-              return jitter != null ? `Jitter: Â±${jitter.toFixed(1)} ms` : "";
+              return jitter != null ? `Jitter: ±${jitter.toFixed(1)} ms` : "";
             },
           },
         },
@@ -217,8 +263,8 @@ function initCharts() {
         ...commonOptions.scales,
         y: {
           ...commonOptions.scales.y,
-          suggestedMax: 20,
-          grace: "10%",
+          suggestedMax: 12,
+          grace: 0,
         },
       },
     },
@@ -291,7 +337,7 @@ function initCharts() {
   try {
     latencyBlocksChart = new Chart(document.getElementById("latency-blocks-chart"), {
     type: "candlestick",
-    plugins: [qualityCandleColorsPlugin],
+    plugins: [qualityCandleColorsPlugin, minuteHighlightPlugin],
     data: {
       datasets: [
         {
@@ -440,46 +486,41 @@ function initCharts() {
     console.error("Distribution chart unavailable", error);
   }
 
-  const historyPieTooltip = {
-    ...tooltipStyle,
-    callbacks: {
-      label(context) {
-        const count = context.raw ?? 0;
-        const total = context.chart.$pieTotal ?? 0;
-        if (!total) {
-          return "No data";
-        }
-        const pct = ((count / total) * 100).toFixed(1);
-        return `${count} (${pct}%)`;
-      },
-    },
-  };
+  initChartResizeObserver();
+  initAnalyticsCharts?.();
+  historyPieBootstrap = buildHistoryPieBootstrap(tooltipStyle);
+  ensureHistoryPieCharts();
+  requestAnimationFrame(() => {
+    requestAnimationFrame(resizeCharts);
+  });
+}
 
-  const historyPieOptions = {
-    responsive: true,
-    maintainAspectRatio: false,
-    animation: false,
-    cutout: "62%",
-    plugins: {
-      legend: { display: false },
-      tooltip: historyPieTooltip,
-    },
-  };
+let chartResizeObserver;
+let chartResizeFrame;
+let historyPieBootstrap;
 
-  const ratingPieColors = [
-    `${LEVEL_COLORS.great}cc`,
-    `${LEVEL_COLORS.good}cc`,
-    `${LEVEL_COLORS.okay}cc`,
-    `${LEVEL_COLORS.bad}cc`,
-    `${LEVEL_COLORS.offline}cc`,
-  ];
+function scheduleChartResize() {
+  cancelAnimationFrame(chartResizeFrame);
+  chartResizeFrame = requestAnimationFrame(() => {
+    chartResizeFrame = requestAnimationFrame(resizeCharts);
+  });
+}
 
-  const qualityPieColors = [
-    "rgba(61, 255, 162, 0.82)",
-    "rgba(255, 194, 77, 0.82)",
-    "rgba(255, 93, 108, 0.82)",
-    "rgba(143, 163, 194, 0.22)",
-  ];
+function ensureHistoryPieCharts() {
+  if (typeof Chart === "undefined" || !historyPieBootstrap) {
+    return;
+  }
+
+  const panel = document.querySelector('[data-panel="history-breakdown"]');
+  if (!panel || panel.classList.contains("is-panel-hidden")) {
+    return;
+  }
+
+  if (historyLatencyPie) {
+    return;
+  }
+
+  const { historyPieOptions, ratingPieColors, qualityPieColors } = historyPieBootstrap;
 
   try {
     historyLatencyPie = new Chart(document.getElementById("history-latency-pie"), {
@@ -517,19 +558,21 @@ function initCharts() {
       },
       options: historyPieOptions,
     });
+
+    initChartResizeObserver();
+
+    if (lastMetricsPayload && needsHistoryVisualizations?.()) {
+      applyHistoryVisualizations(lastMetricsPayload);
+    }
   } catch (error) {
     console.error("History breakdown charts unavailable", error);
   }
-
-  initChartResizeObserver();
 }
-
-let chartResizeObserver;
 
 function initChartResizeObserver() {
   chartResizeObserver?.disconnect();
   chartResizeObserver = new ResizeObserver(() => {
-    resizeCharts();
+    scheduleChartResize();
   });
 
   for (const id of [
@@ -547,6 +590,15 @@ function initChartResizeObserver() {
     if (wrap) {
       chartResizeObserver.observe(wrap);
     }
+  }
+
+  for (const figure of document.querySelectorAll(".history-pie")) {
+    chartResizeObserver.observe(figure);
+  }
+
+  const breakdownPanel = document.querySelector('[data-panel="history-breakdown"]');
+  if (breakdownPanel) {
+    chartResizeObserver.observe(breakdownPanel);
   }
 }
 
@@ -599,6 +651,31 @@ function sampleTimestamp(sample) {
   return new Date(sample.ts).getTime();
 }
 
+function sortSamplesByTime(samples) {
+  if (!samples?.length || samples.length < 2) {
+    return samples ?? [];
+  }
+  return [...samples].sort((a, b) => sampleTimestamp(a) - sampleTimestamp(b));
+}
+
+/* Collapse duplicate timestamps so Chart.js does not draw vertical segments. */
+function dedupeSamplesByTime(samples) {
+  if (!samples?.length) {
+    return [];
+  }
+  const sorted = sortSamplesByTime(samples);
+  const result = [sorted[0]];
+  for (let i = 1; i < sorted.length; i += 1) {
+    const sample = sorted[i];
+    if (sampleTimestamp(sample) === sampleTimestamp(result[result.length - 1])) {
+      result[result.length - 1] = sample;
+    } else {
+      result.push(sample);
+    }
+  }
+  return result;
+}
+
 /* Median spacing between consecutive samples, used to size failure strips. */
 function medianSampleSpacingMs(samples) {
   const deltas = [];
@@ -615,7 +692,7 @@ function medianSampleSpacingMs(samples) {
   return deltas[Math.floor(deltas.length / 2)];
 }
 
-function updateCharts(samples, windowMinutes, latestTs, outages = []) {
+function updateCharts(samples, windowMinutes, latestTs, outages = [], stats = null, baselineMs = null) {
   if (!latencyChart || !jitterChart) {
     return;
   }
@@ -623,13 +700,14 @@ function updateCharts(samples, windowMinutes, latestTs, outages = []) {
   applyChartTimeRange(latencyChart, range);
   applyChartTimeRange(jitterChart, range);
 
+  const orderedSamples = dedupeSamplesByTime(samples);
   const latencyData = [];
   const bandUpper = [];
   const bandLower = [];
   const jitterData = [];
   const failures = [];
 
-  for (const sample of samples) {
+  for (const sample of orderedSamples) {
     const x = sampleTimestamp(sample);
     const latency = sample.success ? sample.latency_ms : null;
     const jitter = sample.jitter_ms ?? null;
@@ -648,16 +726,26 @@ function updateCharts(samples, windowMinutes, latestTs, outages = []) {
     }
   }
 
+  const rollingMedian = computeRollingMedianSeries(orderedSamples);
+
   latencyChart.data.datasets[0].data = latencyData;
   latencyChart.data.datasets[1].data = bandUpper;
   latencyChart.data.datasets[2].data = bandLower;
+  latencyChart.data.datasets[3].data = rollingMedian;
   latencyChart.$failures = failures;
-  latencyChart.$failureWidthMs = medianSampleSpacingMs(samples);
+  latencyChart.$failureWidthMs = medianSampleSpacingMs(orderedSamples);
   latencyChart.$outages = outages ?? [];
   latencyChart.$latestTs = latestTs;
+  latencyChart.$referenceLines = latencyReferenceLines(stats, baselineMs);
+  const latencyYMax = computeLatencyYMax(latencyData, stats, baselineMs, bandUpper);
+  latencyChart.options.scales.y.max = latencyYMax;
+  latencyChart.options.scales.y.suggestedMax = latencyYMax;
   latencyChart.update("none");
 
   jitterChart.data.datasets[0].data = jitterData;
+  const jitterYMax = computeJitterYMax(jitterData);
+  jitterChart.options.scales.y.max = jitterYMax;
+  jitterChart.options.scales.y.suggestedMax = jitterYMax;
   jitterChart.update("none");
 }
 

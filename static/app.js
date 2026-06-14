@@ -1,29 +1,26 @@
 ﻿/* ---------- data fetching ---------- */
 
-async function fetchConnection() {
-  const response = await fetch("/api/connection");
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
-  return response.json();
+function setConnectionStatus(hasData) {
+  statusText.textContent = hasData ? "Live" : "Waiting for data…";
+  statusIndicator.className = hasData ? "status live" : "status";
 }
 
-async function fetchMetrics(knownTs = null) {
-  const params = new URLSearchParams({ windowMinutes: String(getWindowMinutes()) });
-  if (knownTs) {
-    params.set("knownTs", knownTs);
+function applyBlocksPanelCopy(mode, windowMins) {
+  const panel = mode === "history" ? BLOCKS_PANEL_HISTORY : BLOCKS_PANEL_LIVE;
+  if (blocksPanelTitle) {
+    blocksPanelTitle.textContent =
+      typeof panel.title === "function" ? panel.title(windowMins) : panel.title;
   }
-  const response = await fetch(`/api/metrics?${params.toString()}`);
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
+  if (blocksPanelSubtitle) {
+    blocksPanelSubtitle.textContent = panel.subtitle;
   }
-  return response.json();
+
+  const showHistory = mode === "history";
+  document.querySelector('[data-panel="blocks"]')?.classList.toggle("blocks-panel--history", showHistory);
+  document.querySelector('[data-panel="stats"]')?.classList.toggle("stats-panel--history", showHistory);
 }
 
-async function fetchMetricsLive(knownTs = null) {
-  const url = knownTs
-    ? `/api/metrics/live?knownTs=${encodeURIComponent(knownTs)}`
-    : "/api/metrics/live";
+async function fetchJson(url) {
   const response = await fetch(url);
   if (!response.ok) {
     throw new Error(`HTTP ${response.status}`);
@@ -31,24 +28,41 @@ async function fetchMetricsLive(knownTs = null) {
   return response.json();
 }
 
+async function fetchConnection() {
+  return fetchJson("/api/connection");
+}
+
+async function fetchMetrics(knownTs = null) {
+  const params = new URLSearchParams({ windowMinutes: String(getWindowMinutes()) });
+  if (knownTs) {
+    params.set("knownTs", knownTs);
+  }
+  return fetchJson(`/api/metrics?${params.toString()}`);
+}
+
+async function fetchMetricsLive(knownTs = null) {
+  const url = knownTs
+    ? `/api/metrics/live?knownTs=${encodeURIComponent(knownTs)}`
+    : "/api/metrics/live";
+  return fetchJson(url);
+}
+
 function applyLiveMetrics(payload) {
   const { recent_samples: recentSamples, now } = payload;
 
-  if (!isHistoryView()) {
+  if (!needsHistoryVisualizations()) {
     updateHero(now);
   }
   updateStatusPanel(now);
   updateIndicators(now);
   updateLiveFeed(now, recentSamples);
-  if (!isHistoryView()) {
-    updateRecentTable(recentSamples);
-  }
+  updateRecentTable(recentSamples);
+  checkConnectionAlerts(now, null);
 
   lastUpdatedAt = Date.now();
   updateStalenessIndicator();
 
-  statusText.textContent = recentSamples?.length ? "Live" : "Waiting for data…";
-  statusIndicator.className = recentSamples?.length ? "status live" : "status";
+  setConnectionStatus(Boolean(recentSamples?.length));
 }
 
 function applyMetrics(payload) {
@@ -67,11 +81,7 @@ function applyMetrics(payload) {
 
   const windowMins = windowMinutes ?? getWindowMinutes();
   if (!needsHistoryVisualizations()) {
-    blocksPanelTitle.textContent = `Latency blocks (last ${windowMins} min)`;
-    if (blocksPanelSubtitle) {
-      blocksPanelSubtitle.textContent =
-        "1-minute candles — green is good, amber is fair, red is poor (latency + jitter + loss)";
-    }
+    applyBlocksPanelCopy("live", windowMins);
   }
   windowLabel.textContent = String(windowMins);
 
@@ -85,21 +95,20 @@ function applyMetrics(payload) {
   updateLiveFeed(now, recentSamples ?? samples);
   updateSummaryCards(stats);
   updateHealthChip(health, stats);
+  updateQualityBreakdown(blocks);
+  updateQualityTimeline(blocks, outages, windowMins, payload.latest_ts);
+  updateStatSparklines(blocks);
   updateBlocksChart(blocks, windowMins, payload.latest_ts);
-  updateCharts(samples, windowMins, payload.latest_ts, outages);
+  updateCharts(samples, windowMins, payload.latest_ts, outages, stats, now?.baseline_ms ?? null);
   updateLossChart(blocks, windowMins, payload.latest_ts);
-  if (isHistoryView()) {
-    updateRecentTable(recentSamples ?? samples, { limit: HISTORY_RECENT_LIMIT });
-  } else {
-    updateRecentTable(recentSamples ?? samples);
-  }
+  updateRecentTable(recentSamples ?? samples);
   updateOutagesTable(outages);
+  checkConnectionAlerts(now, outages);
 
   lastUpdatedAt = Date.now();
   updateStalenessIndicator();
 
-  statusText.textContent = samples.length ? "Live" : "Waiting for data…";
-  statusIndicator.className = samples.length ? "status live" : "status";
+  setConnectionStatus(Boolean(samples?.length));
   lastFullRefreshAt = Date.now();
 }
 
@@ -190,26 +199,63 @@ function stopStalenessTimer() {
 
 /* ---------- dashboard views (ViewBuilder integration) ---------- */
 
+function pieChartWrapsReady() {
+  const wraps = document.querySelectorAll(".history-pie .chart-wrap--pie");
+  if (!wraps.length) {
+    return true;
+  }
+  return [...wraps].every((wrap) => {
+    const { width, height } = wrap.getBoundingClientRect();
+    return width >= 4 && height >= 4;
+  });
+}
+
+let pieChartResizeRetries = 0;
+
 function resizeCharts() {
+  for (const wrap of document.querySelectorAll(".history-pie .chart-wrap--pie")) {
+    wrap.style.removeProperty("width");
+    wrap.style.removeProperty("height");
+  }
+
   latencyChart?.resize();
   jitterChart?.resize();
   lossChart?.resize();
   latencyBlocksChart?.resize();
   distributionChart?.resize();
+  qualityCompositionChart?.resize();
+  spikeTimelineChart?.resize();
+  latencyJitterScatterChart?.resize();
+
+  if (!pieChartWrapsReady()) {
+    pieChartResizeRetries += 1;
+    if (pieChartResizeRetries < 8) {
+      scheduleChartResize?.();
+    }
+    return;
+  }
+
+  pieChartResizeRetries = 0;
   historyLatencyPie?.resize();
   historyJitterPie?.resize();
   historyLossPie?.resize();
   historyQualityPie?.resize();
 }
 
+function syncHeroChrome(view = ViewBuilder.getCurrentView()) {
+  const windowSummary = needsHistoryVisualizations(view);
+  hero.classList.toggle("hero--window-summary", windowSummary);
+  if (windowSummary) {
+    verdictDetailLive.hidden = true;
+    windowSummaryDetail.hidden = false;
+  } else {
+    resetHeroLiveChrome();
+  }
+}
+
 function resetHeroLiveChrome() {
-  if (heroKicker) {
-    for (const node of heroKicker.childNodes) {
-      if (node.nodeType === Node.TEXT_NODE) {
-        node.textContent = "connection status";
-        break;
-      }
-    }
+  if (heroKickerText) {
+    heroKickerText.textContent = "connection status";
   }
   if (readoutCaption) {
     readoutCaption.innerHTML =
@@ -222,23 +268,18 @@ function resetHeroLiveChrome() {
 function nudgeChartsAfterLayout() {
   requestAnimationFrame(() => {
     requestAnimationFrame(() => {
+      ensureHistoryPieCharts?.();
       resizeCharts();
     });
   });
 }
 
 function handleViewApplied({ view }) {
-  hero.classList.toggle("hero--window-summary", view === "history");
-  if (view === "history") {
-    verdictDetailLive.hidden = true;
-    windowSummaryDetail.hidden = false;
-  } else {
-    resetHeroLiveChrome();
-  }
+  syncHeroChrome(view);
 
   if (needsHistoryVisualizations(view) && lastMetricsPayload) {
     applyHistoryVisualizations(lastMetricsPayload);
-  } else if (!isHistoryView()) {
+  } else {
     const latencyPanelTitle = document.querySelector('[data-panel="latency"] h2');
     if (latencyPanelTitle) {
       latencyPanelTitle.textContent = "Latency";
@@ -248,17 +289,12 @@ function handleViewApplied({ view }) {
     }
     if (lastMetricsPayload) {
       const windowMins = lastMetricsPayload.window_minutes ?? getWindowMinutes();
-      if (blocksPanelTitle) {
-        blocksPanelTitle.textContent = `Latency blocks (last ${windowMins} min)`;
-      }
-      if (blocksPanelSubtitle) {
-        blocksPanelSubtitle.textContent =
-          "1-minute candles — green is good, amber is fair, red is poor (latency + jitter + loss)";
-      }
+      applyBlocksPanelCopy("live", windowMins);
     }
   }
 
   nudgeChartsAfterLayout();
+  initBlockScreenshots?.();
 }
 
 function initDashboardView() {
@@ -267,8 +303,11 @@ function initDashboardView() {
     onViewApplied: handleViewApplied,
   });
   ViewBuilder.onLayoutChange(() => {
+    syncHeroChrome();
     if (needsHistoryVisualizations() && lastMetricsPayload) {
       applyHistoryVisualizations(lastMetricsPayload);
+    } else if (lastMetricsPayload?.now) {
+      updateHero(lastMetricsPayload.now);
     }
     nudgeChartsAfterLayout();
   });
@@ -534,9 +573,12 @@ async function bootstrap() {
   initScreenshot();
   initSettings();
   initHelpPopovers();
+  initMetricsExport();
+  initConnectionAlerts();
 
   try {
     initCharts();
+    initBlocksCrossHighlight();
   } catch (error) {
     console.error("Chart setup failed — live metrics will still load", error);
   }
@@ -553,6 +595,8 @@ async function bootstrap() {
 
   windowSelect.addEventListener("change", () => {
     localStorage.setItem(WINDOW_STORAGE_KEY, windowSelect.value);
+    pinnedMinuteTsMs = null;
+    highlightedMinuteTsMs = null;
     poll(true);
   });
 

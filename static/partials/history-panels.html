@@ -5,15 +5,19 @@
           <h2>Selected window</h2>
           <p class="panel-subtitle">Stability over the last <span id="window-label">—</span> minutes</p>
         </div>
-        <div class="health-chip health-chip--no_data" id="health-chip">
-          <span class="health-dot" aria-hidden="true"></span>
-          <span id="health-label">No data</span>
-          <span class="health-detail" id="health-detail"></span>
+        <div class="panel-head-actions">
+          <button type="button" class="export-metrics-btn" id="export-metrics-btn" title="Download window metrics as JSON (Shift+click for CSV)">Export</button>
+          <div class="health-chip health-chip--no_data" id="health-chip">
+            <span class="health-dot" aria-hidden="true"></span>
+            <span id="health-label">No data</span>
+            <span class="health-detail" id="health-detail"></span>
+          </div>
         </div>
       </div>
       <div class="stats-strip">
-        <div class="stat">
+        <div class="stat stat--sparkline">
           <span class="stat-name">Avg latency</span>
+          <canvas class="stat-sparkline" id="sparkline-avg-latency" aria-hidden="true"></canvas>
           <span class="stat-value mono" id="avg-latency">—</span>
         </div>
         <div class="stat">
@@ -28,12 +32,14 @@
           <span class="stat-name">P95</span>
           <span class="stat-value mono" id="p95-latency">—</span>
         </div>
-        <div class="stat">
+        <div class="stat stat--sparkline">
           <span class="stat-name">Avg jitter</span>
+          <canvas class="stat-sparkline" id="sparkline-avg-jitter" aria-hidden="true"></canvas>
           <span class="stat-value mono" id="avg-jitter">—</span>
         </div>
-        <div class="stat">
+        <div class="stat stat--sparkline">
           <span class="stat-name">Packet loss</span>
+          <canvas class="stat-sparkline" id="sparkline-packet-loss" aria-hidden="true"></canvas>
           <span class="stat-value mono" id="packet-loss">—</span>
         </div>
         <div class="stat">
@@ -77,41 +83,95 @@
       </div>
     </section>
 
+    <div class="analytics-charts-grid">
+      <section class="panel panel--quality-composition" data-panel="quality-composition">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title-row">
+              <h2>Quality composition</h2>
+            </div>
+            <p class="panel-subtitle">Minute-level connection quality stacked across the selected window</p>
+          </div>
+        </div>
+        <div class="chart-wrap chart-wrap--composition">
+          <canvas id="quality-composition-chart"></canvas>
+        </div>
+      </section>
+
+      <section class="panel panel--spike-timeline" data-panel="spike-timeline">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title-row">
+              <h2>Spike timeline</h2>
+            </div>
+            <p class="panel-subtitle">Pings exceeding the rolling baseline spike threshold</p>
+          </div>
+        </div>
+        <div class="chart-wrap chart-wrap--spikes">
+          <canvas id="spike-timeline-chart"></canvas>
+        </div>
+      </section>
+
+      <section class="panel panel--latency-jitter-scatter" data-panel="latency-jitter-scatter">
+        <div class="panel-head">
+          <div>
+            <div class="panel-title-row">
+              <h2>Latency vs jitter</h2>
+            </div>
+            <p class="panel-subtitle">Each point is one successful ping — color shows latency tier</p>
+          </div>
+        </div>
+        <div class="chart-wrap chart-wrap--scatter">
+          <canvas id="latency-jitter-scatter-chart"></canvas>
+        </div>
+      </section>
+    </div>
+
     <section class="panel panel--history-breakdown" data-panel="history-breakdown">
       <div class="panel-head">
         <div>
-          <h2>History breakdown</h2>
+          <div class="panel-title-row">
+            <h2>History breakdown</h2>
+          </div>
           <p class="panel-subtitle">How the selected window splits across quality tiers</p>
         </div>
       </div>
       <div class="history-breakdown-grid">
         <figure class="history-pie">
-          <figcaption class="history-pie-head">
-            <h3>Latency</h3>
-            <p class="history-pie-caption mono" id="history-latency-pie-caption">—</p>
-          </figcaption>
-          <div class="chart-wrap chart-wrap--pie"><canvas id="history-latency-pie"></canvas></div>
+          <div class="history-pie-inner">
+            <figcaption class="history-pie-head">
+              <h3>Latency</h3>
+              <p class="history-pie-caption mono" id="history-latency-pie-caption">—</p>
+            </figcaption>
+            <div class="chart-wrap chart-wrap--pie"><canvas id="history-latency-pie"></canvas></div>
+          </div>
         </figure>
         <figure class="history-pie">
-          <figcaption class="history-pie-head">
-            <h3>Jitter</h3>
-            <p class="history-pie-caption mono" id="history-jitter-pie-caption">—</p>
-          </figcaption>
-          <div class="chart-wrap chart-wrap--pie"><canvas id="history-jitter-pie"></canvas></div>
+          <div class="history-pie-inner">
+            <figcaption class="history-pie-head">
+              <h3>Jitter</h3>
+              <p class="history-pie-caption mono" id="history-jitter-pie-caption">—</p>
+            </figcaption>
+            <div class="chart-wrap chart-wrap--pie"><canvas id="history-jitter-pie"></canvas></div>
+          </div>
         </figure>
         <figure class="history-pie">
-          <figcaption class="history-pie-head">
-            <h3>Packet loss</h3>
-            <p class="history-pie-caption mono" id="history-loss-pie-caption">—</p>
-          </figcaption>
-          <div class="chart-wrap chart-wrap--pie"><canvas id="history-loss-pie"></canvas></div>
+          <div class="history-pie-inner">
+            <figcaption class="history-pie-head">
+              <h3><span class="history-pie-title-long">Packet loss</span><span class="history-pie-title-short" aria-hidden="true">Loss</span></h3>
+              <p class="history-pie-caption mono" id="history-loss-pie-caption">—</p>
+            </figcaption>
+            <div class="chart-wrap chart-wrap--pie"><canvas id="history-loss-pie"></canvas></div>
+          </div>
         </figure>
         <figure class="history-pie">
-          <figcaption class="history-pie-head">
-            <h3>Minute quality</h3>
-            <p class="history-pie-caption mono" id="history-quality-pie-caption">—</p>
-          </figcaption>
-          <div class="chart-wrap chart-wrap--pie"><canvas id="history-quality-pie"></canvas></div>
+          <div class="history-pie-inner">
+            <figcaption class="history-pie-head">
+              <h3><span class="history-pie-title-long">Minute quality</span><span class="history-pie-title-short" aria-hidden="true">Quality</span></h3>
+              <p class="history-pie-caption mono" id="history-quality-pie-caption">—</p>
+            </figcaption>
+            <div class="chart-wrap chart-wrap--pie"><canvas id="history-quality-pie"></canvas></div>
+          </div>
         </figure>
       </div>
     </section>
@@ -149,7 +209,12 @@
         <span class="chart-legend">
           <span class="legend-item"><i class="legend-dot legend-dot--latency-line"></i>latency</span>
           <span class="legend-item"><i class="legend-dot legend-dot--jitter-band"></i>± jitter</span>
+          <span class="legend-item"><i class="legend-dot legend-dot--ref-baseline"></i>60s baseline</span>
+          <span class="legend-item"><i class="legend-dot legend-dot--ref-median"></i>rolling median</span>
+          <span class="legend-item"><i class="legend-dot legend-dot--ref-avg"></i>window avg</span>
+          <span class="legend-item"><i class="legend-dot legend-dot--ref-p95"></i>p95</span>
           <span class="legend-item"><i class="legend-dot legend-dot--fail"></i>failed ping</span>
+          <span class="legend-item"><i class="legend-dot legend-dot--outage"></i>outage</span>
         </span>
       </div>
     </section>

@@ -7,7 +7,7 @@ const METRIC_HELP = {
       "Your typical round-trip latency to the target — the steady response time you'd normally feel in-game, not a single momentary reading.",
       "Calculated as the median of successful pings over the last 60 seconds. Short spikes barely move this number, so it reflects your baseline rather than one-off blips.",
     ],
-    thresholds: "Great &lt; 40 ms · Good &lt; 70 ms · Okay &lt; 110 ms · Bad â‰¥ 110 ms",
+    thresholds: "Great &lt; 40 ms · Good &lt; 70 ms · Okay &lt; 110 ms · Bad ≥ 110 ms",
   },
   jitter: {
     title: "Jitter",
@@ -15,7 +15,7 @@ const METRIC_HELP = {
       "How much your ping wobbles from one packet to the next. Low jitter means steady timing; high jitter feels like stutter or rubber-banding even when average ping looks fine.",
       "Average inter-arrival jitter (RFC 3550-style smoothing) across successful pings in the last 2 minutes.",
     ],
-    thresholds: "Great &lt; 8 ms · Good &lt; 15 ms · Okay &lt; 30 ms · Bad â‰¥ 30 ms",
+    thresholds: "Great &lt; 8 ms · Good &lt; 15 ms · Okay &lt; 30 ms · Bad ≥ 30 ms",
   },
   loss: {
     title: "Packet loss",
@@ -23,15 +23,15 @@ const METRIC_HELP = {
       "The share of ping requests that never got a reply. Dropped packets make actions arrive late or not at all — you'll notice it as hitches, desync, or abilities misfiring.",
       "Failed pings divided by total pings in the last 2 minutes.",
     ],
-    thresholds: "Great 0% · Good &lt; 1% · Okay â‰¤ 3% · Bad &gt; 3%",
+    thresholds: "Great 0% · Good &lt; 1% · Okay ≤ 3% · Bad &gt; 3%",
   },
   spikes: {
     title: "Spike rate",
     paragraphs: [
       "How often latency suddenly shoots far above your normal baseline. A single bad ping is a micro-hitch; frequent spikes feel like ongoing rubber-banding.",
-      "Counts pings that exceed max(2.5Ã— baseline, baseline + 80 ms) in the last 2 minutes, then expresses that as spikes per minute. The rating follows the rate, not the single worst value.",
+      "Counts pings that exceed max(2.5× baseline, baseline + 80 ms) in the last 2 minutes, then expresses that as spikes per minute. The rating follows the rate, not the single worst value.",
     ],
-    thresholds: "Great 0/min · Good &lt; 1/min · Okay â‰¤ 4/min · Bad &gt; 4/min",
+    thresholds: "Great 0/min · Good &lt; 1/min · Okay ≤ 4/min · Bad &gt; 4/min",
   },
 };
 
@@ -42,7 +42,7 @@ const CHART_HELP = {
       "The raw, unfiltered view of what's happening right now. The big number is the latest ping, and each bar in the strip is one ping — the last 60, newest on the right. Taller bars mean higher latency; a full-height red bar is a ping that never came back.",
       "Nothing here is smoothed or damped, so this row is allowed to jump around. The instant chip reads only the last few pings — treat it as a gut check, not a verdict.",
     ],
-    thresholds: "Bar colors: great &lt; 40 ms · good &lt; 70 ms · fair &lt; 110 ms · poor â‰¥ 110 ms · red = failed",
+    thresholds: "Bar colors: great &lt; 40 ms · good &lt; 70 ms · fair &lt; 110 ms · poor ≥ 110 ms · red = failed",
   },
   "latency-blocks": {
     title: "Latency blocks",
@@ -55,10 +55,10 @@ const CHART_HELP = {
   latency: {
     title: "Latency",
     paragraphs: [
-      "Every ping's round-trip time across the selected window. The purple band hugging the line shows Â±jitter at that moment — the wider the band, the less steady the connection.",
-      "Shaded horizontal zones in the background mark the quality thresholds, and thin red vertical strips mark pings that failed and therefore have no latency value.",
+      "Every ping's round-trip time across the selected window. The purple band hugging the line shows ±jitter at that moment — the wider the band, the less steady the connection.",
+      "The green dashed line tracks the live 60s median baseline (same as the hero readout). The smoother green trace is a rolling 60s median overlay for trend reading. Dashed horizontal guides also mark the window average and 95th percentile (p95). Shaded horizontal zones mark quality thresholds, and thin red vertical strips mark pings that failed.",
     ],
-    thresholds: "Zones: great &lt; 40 ms · good &lt; 70 ms · fair &lt; 110 ms · poor â‰¥ 110 ms",
+    thresholds: "Zones: great &lt; 40 ms · good &lt; 70 ms · fair &lt; 110 ms · poor ≥ 110 ms",
   },
   "jitter-chart": {
     title: "Jitter",
@@ -66,7 +66,7 @@ const CHART_HELP = {
       "How much the timing between pings wobbles, plotted per ping. A line hugging zero means packets arrive on a steady beat; rising jitter feels like stutter or rubber-banding even when average ping looks fine.",
       "Values use the same RFC 3550-style smoothing as the jitter indicator above, so a single odd packet won't spike the line.",
     ],
-    thresholds: "Zones: great &lt; 8 ms · good &lt; 15 ms · fair &lt; 30 ms · poor â‰¥ 30 ms",
+    thresholds: "Zones: great &lt; 8 ms · good &lt; 15 ms · fair &lt; 30 ms · poor ≥ 30 ms",
   },
   "loss-chart": {
     title: "Packet loss",
@@ -74,7 +74,7 @@ const CHART_HELP = {
       "The share of pings that went unanswered, bucketed per minute — one bar per minute, taller is worse. Minutes with no loss show no bar at all.",
       "Bar color reflects severity, and the dashed reference lines mark where loss starts to be noticeable. Hover a bar to see exactly how many pings failed.",
     ],
-    thresholds: "Good &lt; 1% · fair â‰¤ 3% · poor &gt; 3%",
+    thresholds: "Good &lt; 1% · fair ≤ 3% · poor &gt; 3%",
   },
 };
 
@@ -169,7 +169,7 @@ const THRESHOLD_LEVEL_WORDS = {
 
 function colorizeThresholdText(text) {
   let html = text.replace(
-    /\b(Great|Good|Okay|Bad|great|good|fair|poor|Green|amber|red)(?=\s|[<â‰¥â‰¤=·]|$)/gi,
+    /\b(Great|Good|Okay|Bad|great|good|fair|poor|Green|amber|red)(?=\s|[<≥≤=·]|$)/gi,
     (match) => {
       const level = THRESHOLD_LEVEL_WORDS[match.toLowerCase()];
       if (!level) return match;
@@ -399,7 +399,7 @@ function updateLiveFeed(now, samples) {
     livePing.dataset.rating = rateMetric("ping", latest.latency_ms);
     livePingSub.textContent = formatTime(latest.ts);
   } else {
-    livePing.textContent = "âœ•";
+    livePing.textContent = "×";
     livePing.dataset.rating = "bad";
     livePingSub.textContent = `${formatTime(latest.ts)} · failed`;
   }

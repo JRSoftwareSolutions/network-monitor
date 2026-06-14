@@ -47,6 +47,7 @@ from src.metrics import (
     compute_window_options,
     detect_outages,
     downsample_samples,
+    sort_samples_by_ts,
 )
 from src.network_info import get_active_connection
 from src.ping_monitor import PingMonitor
@@ -196,8 +197,10 @@ def _build_metrics_payload(window: int) -> dict:
     trend_minutes = _trend_window_minutes()
     fetch_minutes = max(window, trend_minutes)
     all_samples = monitor.get_samples(fetch_minutes)
-    samples = _filter_samples(all_samples, window) if fetch_minutes != window else all_samples
-    trend_samples = _filter_samples(all_samples, trend_minutes)
+    samples = sort_samples_by_ts(
+        _filter_samples(all_samples, window) if fetch_minutes != window else all_samples
+    )
+    trend_samples = sort_samples_by_ts(_filter_samples(all_samples, trend_minutes))
 
     stats = compute_stats(samples)
     chart_samples = downsample_samples(samples, window_minutes=window)

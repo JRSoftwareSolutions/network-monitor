@@ -303,6 +303,7 @@ const BLOCK_SCREENSHOT_TARGETS = [
   { selector: ".live-panel", label: "live-feed", name: "Live feed", placement: "title-row" },
   { selector: ".panel--stats", label: "window-stats", name: "Selected window", placement: "title-row" },
   { selector: ".panel--blocks", label: "latency-blocks", name: "Latency blocks", placement: "title-row" },
+  { selector: ".panel--history-breakdown", label: "history-breakdown", name: "History breakdown", placement: "title-row" },
   { selector: ".panel--latency", label: "latency", name: "Latency", placement: "title-row" },
   { selector: ".panel--jitter", label: "jitter", name: "Jitter", placement: "title-row" },
   { selector: ".panel--loss", label: "loss", name: "Packet loss", placement: "title-row" },

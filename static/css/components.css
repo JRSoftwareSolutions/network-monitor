@@ -1,3 +1,4 @@
-﻿@import url("components-shell.css");
+﻿/* Legacy hub — prefer direct <link> tags in index.html for parallel loading. */
+@import url("components-shell.css");
 @import url("components-tiles.css");
 @import url("components-data.css");

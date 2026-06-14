@@ -1,27 +1,26 @@
 ﻿/* ---------- dashboard view builder ---------- */
 
 const ViewBuilder = (() => {
-  const BUILTIN_VIEWS = ["default", "live", "history"];
+  const BUILTIN_VIEWS = ["default", "analytics"];
+  const REMOVED_BUILTIN_VIEWS = ["live", "history"];
   const DASHBOARD_VIEW_LABELS = {
     default: "Default",
-    live: "Live",
-    history: "History",
+    analytics: "Analytics",
   };
   const BUILTIN_DESCRIPTIONS = {
     default: "Full dashboard with scrollable layout",
-    live: "Fullscreen real-time monitor",
-    history: "Fullscreen rolling-window dashboard",
+    analytics: "Visualization-focused layout with analytics charts",
   };
   const MAX_CUSTOM_VIEWS = 20;
   const LAYOUT_PANEL_MIN_WIDTH = 280;
   const LAYOUT_PANEL_MAX_WIDTH = 960;
   const LAYOUT_PANEL_DEFAULT_WIDTH = 512;
-  const LAYOUT_PANEL_WIDTH_STORAGE_KEY = "networkMonitor.layoutPanelWidth";
 
   const PANEL_GROUPS = {
     status: { label: "Status & verdict", order: 1 },
     live: { label: "Live monitoring", order: 2 },
     window: { label: "Window summary", order: 3 },
+    analytics: { label: "Analytics", order: 3.5 },
     charts: { label: "Charts", order: 4 },
     history: { label: "History detail", order: 5 },
     tables: { label: "Tables", order: 6 },
@@ -63,6 +62,24 @@ const ViewBuilder = (() => {
       label: "Latency blocks",
       group: "window",
       description: "1-minute candlesticks for the selected window",
+    },
+    {
+      id: "quality-composition",
+      label: "Quality composition",
+      group: "analytics",
+      description: "Stacked minute-quality timeline across the window",
+    },
+    {
+      id: "spike-timeline",
+      label: "Spike timeline",
+      group: "analytics",
+      description: "Latency spikes detected across the selected window",
+    },
+    {
+      id: "latency-jitter-scatter",
+      label: "Latency vs jitter",
+      group: "analytics",
+      description: "Scatter plot of ping latency against jitter",
     },
     {
       id: "distribution",
@@ -140,6 +157,9 @@ const ViewBuilder = (() => {
       live: true,
       stats: true,
       blocks: true,
+      "quality-composition": false,
+      "spike-timeline": false,
+      "latency-jitter-scatter": false,
       distribution: false,
       "history-breakdown": false,
       latency: true,
@@ -152,37 +172,21 @@ const ViewBuilder = (() => {
       "best-minutes": false,
       "minute-log": false,
     },
-    live: {
-      hero: true,
-      status: false,
-      indicators: true,
-      live: true,
-      stats: false,
-      blocks: false,
-      distribution: false,
-      "history-breakdown": false,
-      latency: true,
-      jitter: false,
-      loss: false,
-      outages: false,
-      recent: false,
-      "worst-minutes": false,
-      "window-insights": false,
-      "best-minutes": false,
-      "minute-log": false,
-    },
-    history: {
-      hero: true,
+    analytics: {
+      hero: false,
       status: false,
       indicators: false,
       live: false,
       stats: true,
       blocks: true,
-      distribution: false,
+      "quality-composition": true,
+      "spike-timeline": true,
+      "latency-jitter-scatter": true,
+      distribution: true,
       "history-breakdown": true,
       latency: true,
-      jitter: false,
-      loss: false,
+      jitter: true,
+      loss: true,
       outages: false,
       recent: false,
       "worst-minutes": false,
@@ -195,6 +199,9 @@ const ViewBuilder = (() => {
   const HISTORY_DATA_PANEL_IDS = [
     "history-breakdown",
     "distribution",
+    "quality-composition",
+    "spike-timeline",
+    "latency-jitter-scatter",
     "worst-minutes",
     "best-minutes",
     "minute-log",
@@ -217,6 +224,9 @@ const ViewBuilder = (() => {
         live: false,
         stats: false,
         blocks: false,
+        "quality-composition": false,
+        "spike-timeline": false,
+        "latency-jitter-scatter": false,
         distribution: false,
         "history-breakdown": false,
         latency: true,
@@ -239,6 +249,9 @@ const ViewBuilder = (() => {
         live: false,
         stats: false,
         blocks: false,
+        "quality-composition": false,
+        "spike-timeline": false,
+        "latency-jitter-scatter": false,
         distribution: false,
         "history-breakdown": false,
         latency: false,
@@ -261,6 +274,9 @@ const ViewBuilder = (() => {
         live: false,
         stats: false,
         blocks: false,
+        "quality-composition": false,
+        "spike-timeline": false,
+        "latency-jitter-scatter": false,
         distribution: false,
         "history-breakdown": false,
         latency: false,
@@ -274,11 +290,14 @@ const ViewBuilder = (() => {
         "minute-log": false,
       },
     },
+    analytics: {
+      label: "Analytics dashboard",
+      panels: { ...VIEW_DEFAULTS.analytics },
+    },
   };
 
   let viewSelect = null;
   let tablesGrid = null;
-  let dashboardViewScrollY = 0;
   let currentDashboardView = "default";
   let panelPrefs = {};
   let customViews = {};
@@ -332,16 +351,52 @@ const ViewBuilder = (() => {
     return BUILTIN_VIEWS.includes(view);
   }
 
+  function isRemovedBuiltinView(view) {
+    return REMOVED_BUILTIN_VIEWS.includes(view);
+  }
+
+  function purgeRemovedBuiltinState() {
+    for (const id of REMOVED_BUILTIN_VIEWS) {
+      delete panelPrefs[id];
+      delete customViews[id];
+      delete customViewSnapshots[id];
+    }
+
+    const saved = localStorage.getItem(DASHBOARD_VIEW_STORAGE_KEY);
+    if (saved && isRemovedBuiltinView(saved)) {
+      localStorage.setItem(DASHBOARD_VIEW_STORAGE_KEY, "default");
+    }
+
+    localStorage.removeItem("networkMonitor.fillMode");
+
+    if (Object.keys(panelPrefs).length) {
+      savePanelPrefs();
+    } else {
+      localStorage.removeItem(PANEL_PREFS_STORAGE_KEY);
+    }
+
+    if (Object.keys(customViews).length) {
+      saveCustomViews();
+    } else {
+      localStorage.removeItem(CUSTOM_VIEWS_STORAGE_KEY);
+    }
+  }
+
+  function updateViewSelectVisibility() {
+    if (!viewSelect) return;
+
+    const viewLabel = viewSelect.closest(".controls")?.querySelector('label[for="view-select"]');
+    const hasCustomViews = Object.keys(customViews).length > 0;
+    const showViewSelect = BUILTIN_VIEWS.length > 1 || hasCustomViews;
+
+    viewSelect.hidden = !showViewSelect;
+    if (viewLabel) {
+      viewLabel.hidden = !showViewSelect;
+    }
+  }
+
   function isCustomView(view) {
     return Boolean(customViews[view]);
-  }
-
-  function isFullscreenView(view) {
-    return view === "live" || view === "history";
-  }
-
-  function isHistoryView(view = currentDashboardView) {
-    return view === "history";
   }
 
   function loadCustomViews() {
@@ -369,6 +424,9 @@ const ViewBuilder = (() => {
 
   function migrateCustomViews() {
     for (const [id, view] of Object.entries(customViews)) {
+      if (view.basedOn === "live" || view.basedOn === "history") {
+        view.basedOn = "default";
+      }
       const basedOn = view.basedOn && VIEW_DEFAULTS[view.basedOn] ? view.basedOn : "default";
       view.panels = normalizePanelMap(view.panels, VIEW_DEFAULTS[basedOn]);
       if (!view.createdAt) {
@@ -481,9 +539,6 @@ const ViewBuilder = (() => {
   }
 
   function needsHistoryVisualizations(view = currentDashboardView) {
-    if (view === "history") {
-      return true;
-    }
     const visibility = getEffectivePanelVisibility(view);
     return HISTORY_DATA_PANEL_IDS.some((id) => visibility[id]);
   }
@@ -581,6 +636,7 @@ const ViewBuilder = (() => {
     }
 
     viewSelect.value = selected;
+    updateViewSelectVisibility();
   }
 
   function updateSettingsLayoutSummary() {
@@ -592,20 +648,14 @@ const ViewBuilder = (() => {
   function setDashboardView(view, persist = true) {
     const nextView = isValidViewId(view) ? view : "default";
     const prevView = currentDashboardView;
-    const wasFullscreen = isFullscreenView(prevView);
-    const isFullscreen = isFullscreenView(nextView);
-
-    if (isFullscreen && !wasFullscreen) {
-      dashboardViewScrollY = window.scrollY;
-      window.scrollTo(0, 0);
-    }
 
     currentDashboardView = nextView;
-    document.body.dataset.view = nextView;
 
     if (viewSelect) {
       viewSelect.value = nextView;
     }
+
+    document.body.dataset.dashboardView = nextView;
 
     applyPanelVisibility(nextView);
 
@@ -616,17 +666,7 @@ const ViewBuilder = (() => {
     notifyViewChange({
       view: nextView,
       prevView,
-      wasFullscreen,
-      isFullscreen,
     });
-
-    if (!isFullscreen && wasFullscreen) {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          window.scrollTo(0, dashboardViewScrollY);
-        });
-      });
-    }
 
     updateSettingsLayoutSummary();
   }
@@ -1637,13 +1677,12 @@ const ViewBuilder = (() => {
 
   function getInitialDashboardView() {
     const saved = localStorage.getItem(DASHBOARD_VIEW_STORAGE_KEY);
+    if (saved === "live" || saved === "history") {
+      localStorage.setItem(DASHBOARD_VIEW_STORAGE_KEY, "default");
+      return "default";
+    }
     if (saved && isValidViewId(saved)) {
       return saved;
-    }
-
-    if (localStorage.getItem(FILL_MODE_STORAGE_KEY) === "1") {
-      localStorage.removeItem(FILL_MODE_STORAGE_KEY);
-      return "live";
     }
 
     return "default";
@@ -1656,6 +1695,7 @@ const ViewBuilder = (() => {
 
     loadPanelPrefs();
     loadCustomViews();
+    purgeRemovedBuiltinState();
     bindLayoutDialog();
     rebuildViewSelect();
 
@@ -1699,8 +1739,6 @@ const ViewBuilder = (() => {
     init,
     getCurrentView: () => currentDashboardView,
     setView: setDashboardView,
-    isHistoryView,
-    isFullscreenView,
     needsHistoryVisualizations,
     getEffectivePanelVisibility,
     openLayoutDialog,

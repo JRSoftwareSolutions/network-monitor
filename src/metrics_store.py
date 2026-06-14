@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from itertools import islice
 from pathlib import Path
 
-from src.metrics_time import _parse_ts, clamp_window_minutes
+from src.metrics_time import _parse_ts, clamp_window_minutes, sort_samples_by_ts
 
 
 class JitterTracker:
@@ -79,8 +79,8 @@ class SampleStore:
             self._trim_locked()
             start = bisect_left(self._epochs, cutoff)
             if start <= 0:
-                return list(self._samples)
-            return list(islice(self._samples, start, None))
+                return sort_samples_by_ts(list(self._samples))
+            return sort_samples_by_ts(list(islice(self._samples, start, None)))
 
     def latest(self) -> dict | None:
         with self._lock:
@@ -93,8 +93,8 @@ class SampleStore:
                 return []
             total = len(self._samples)
             if count >= total:
-                return list(self._samples)
-            return list(islice(self._samples, total - count, None))
+                return sort_samples_by_ts(list(self._samples))
+            return sort_samples_by_ts(list(islice(self._samples, total - count, None)))
 
 
 def _parse_log_line(line: str) -> tuple[datetime, str] | None:
