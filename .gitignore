@@ -3,6 +3,7 @@ test-results/
 logs/
 screenshots/
 __pycache__/
+.pytest_cache/
 *.py[cod]
 .venv/
 venv/

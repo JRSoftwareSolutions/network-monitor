@@ -5,7 +5,7 @@ Measures **latency**, **jitter**, and **packet loss** by pinging a configurable 
 ## Requirements
 
 - Python 3.10+
-- Windows (uses native `ping` command)
+- Windows (native ICMP via `IcmpSendEcho`, with subprocess fallback)
 
 ## Setup
 
@@ -164,12 +164,21 @@ On Windows, pings use the native `IcmpSendEcho` API (no `ping.exe` subprocess pe
 | `desktop.py` | PyInstaller desktop entry (WebView2 window) |
 | `ping_monitor.py` | Async ping loop, orchestrates store + logger |
 | `sample_store.py` | In-memory ring buffer of recent samples |
+| `sample_utils.py` | Sample filtering and loss-pct helpers |
 | `metrics_logger.py` | JSONL persistence, age/size maintenance, daily archives |
 | `metrics_analytics.py` | Downsampling, bucketing, stats, outage detection |
-| `metrics.py` | Public facade re-exporting analytics + store APIs |
-| `metrics_verdict.py` | Gaming thresholds, stabilizer hysteresis |
+| `metrics.py` | Public facade re-exporting analytics, verdict, and store APIs |
+| `metrics_verdict.py` | Re-export barrel over the three `verdict_*` modules |
+| `metrics_constants.py` | Gaming threshold constants and config payload |
+| `metrics_windows.py` | Time-window constants (now, baseline, trend) |
+| `metrics_cache.py` | In-memory cache for lightweight live polls |
 | `metrics_narrative.py` | Plain-language status copy |
 | `metrics_time.py` | Timestamp parsing/formatting helpers |
+| `indicator_series.py` | Per-indicator sparkline series |
+| `api_payloads.py` | Builds `/api/metrics` and live-poll response bodies |
+| `verdict_gaming.py` | Tier rating, spikes, instant verdict |
+| `verdict_health.py` | Window-level health level |
+| `verdict_stabilizer.py` | Display-verdict hysteresis |
 | `config.py` | YAML config load/save with validation |
 | `network_info.py` | Windows connection label for the UI |
 | `win_ping.py` / `win_proc.py` / `jitter.py` | Native ICMP, process helpers, jitter tracker |

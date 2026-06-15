@@ -51,19 +51,17 @@ window.DashboardRating = (() => {
     SCALE = buildAllScales();
   }
 
+  function rateZeroInclusive(value, tiers) {
+    if (value <= 0) return "great";
+    if (value < tiers.good) return "good";
+    if (value <= tiers.okay) return "okay";
+    return "bad";
+  }
+
   function rateByThresholds(value, key) {
     const tiers = THRESHOLDS[key];
-    if (key === "loss") {
-      if (value <= 0) return "great";
-      if (value < tiers.good) return "good";
-      if (value <= tiers.okay) return "okay";
-      return "bad";
-    }
-    if (key === "spikes") {
-      if (value <= 0) return "great";
-      if (value < tiers.good) return "good";
-      if (value <= tiers.okay) return "okay";
-      return "bad";
+    if (key === "loss" || key === "spikes") {
+      return rateZeroInclusive(value, tiers);
     }
     if (value < tiers.great) return "great";
     if (value < tiers.good) return "good";

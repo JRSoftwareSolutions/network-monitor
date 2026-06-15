@@ -34,8 +34,8 @@ _GAMING_LABELS = {
     "offline": "Offline",
     "no_data": "No data",
 }
-_GAMING_RANK = {"great": 0, "good": 1, "okay": 2, "bad": 3}
 DISPLAY_RANK = {"great": 0, "good": 1, "okay": 2, "bad": 3, "offline": 4}
+_GAMING_RANK = {k: DISPLAY_RANK[k] for k in ("great", "good", "okay", "bad")}
 
 
 def gaming_label(level: str) -> str:
@@ -97,24 +97,22 @@ def _rate_scale(value: float, great: float, good: float, okay: float) -> str:
     return "bad"
 
 
-def rate_loss_pct(loss_pct: float) -> str:
-    if loss_pct <= 0:
+def _rate_zero_inclusive(value: float, good: float, okay: float) -> str:
+    if value <= 0:
         return "great"
-    if loss_pct < GAMING_LOSS_GOOD:
+    if value < good:
         return "good"
-    if loss_pct <= GAMING_LOSS_OKAY:
+    if value <= okay:
         return "okay"
     return "bad"
+
+
+def rate_loss_pct(loss_pct: float) -> str:
+    return _rate_zero_inclusive(loss_pct, GAMING_LOSS_GOOD, GAMING_LOSS_OKAY)
 
 
 def rate_spike_rate(rate_per_min: float) -> str:
-    if rate_per_min <= 0:
-        return "great"
-    if rate_per_min < GAMING_SPIKE_GOOD:
-        return "good"
-    if rate_per_min <= GAMING_SPIKE_OKAY:
-        return "okay"
-    return "bad"
+    return _rate_zero_inclusive(rate_per_min, GAMING_SPIKE_GOOD, GAMING_SPIKE_OKAY)
 
 
 def rate_bucket_quality(bucket: dict) -> str:

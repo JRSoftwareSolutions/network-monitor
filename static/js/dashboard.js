@@ -307,16 +307,12 @@
     DR.updateIndicatorSparklines(state.sparklineNow, state.indicatorSeries);
   }
 
-  function resizeCharts() {
-    refreshCharts();
-  }
-
   window.addEventListener("nm:layout-change", refreshCharts);
 
   async function bootstrap() {
     if (window.ViewBuilder) {
       ViewBuilder.init({
-        onLayoutApplied: resizeCharts,
+        onLayoutApplied: refreshCharts,
       });
     }
     try { DC.initCharts($); } catch (err) { console.error("chart init failed", err); }
@@ -340,7 +336,7 @@
     schedulePoll();
     scheduleConnection();
     state.stalenessTimer = setInterval(updateStaleness, 1000);
-    resizeCharts();
+    refreshCharts();
 
     document.addEventListener("visibilitychange", () => {
       if (!document.hidden) resumeDashboard();
