@@ -73,6 +73,7 @@ const DashboardGrid = (() => {
     clearSpanClasses(el);
     el.classList.add(spanClass(item.w));
     el.style.order = String(item.order);
+    void el.offsetWidth;
   }
 
   function readPanelWidth(el) {
@@ -99,11 +100,45 @@ const DashboardGrid = (() => {
     window.dispatchEvent(new CustomEvent("nm:layout-change"));
   }
 
-  function scheduleLayoutChange() {
+  function resizeChartsNow() {
+    window.DashboardCharts?.layoutSettledRefresh?.();
+  }
+
+  const HIDE_BTN_ICON = `
+    <svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true">
+      <path d="M2 8s2.5-4 6-4 6 4 6 4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+      <path d="M2 8s2.5 4 6 4 6-4 6-4" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+      <circle cx="8" cy="8" r="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/>
+      <path d="M3 3l10 10" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>
+    </svg>
+  `;
+
+  function syncHideButtons() {
+    if (!gridEl) return;
+    for (const el of gridEl.querySelectorAll("[data-panel]")) {
+      const existing = el.querySelector(".layout-panel-hide-btn");
+      if (!editMode || el.classList.contains("is-panel-hidden")) {
+        existing?.remove();
+        continue;
+      }
+      if (existing) continue;
+      const panelId = el.dataset.panel;
+      const label = ViewsModel.getPanelMeta(panelId)?.label ?? panelId;
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "layout-panel-hide-btn";
+      btn.setAttribute("aria-label", `Hide ${label}`);
+      btn.title = `Hide ${label}`;
+      btn.draggable = false;
+      btn.innerHTML = HIDE_BTN_ICON;
+      el.appendChild(btn);
+    }
+  }
+
+  function scheduleLayoutSave() {
     clearTimeout(changeTimer);
     changeTimer = setTimeout(() => {
       ViewsModel.saveLayoutFromGrid(ViewsModel.currentView, readLayoutFromDom());
-      dispatchLayoutChange();
     }, 150);
   }
 
@@ -119,10 +154,16 @@ const DashboardGrid = (() => {
       if (!el) continue;
       const visible = visibilityMap[panelId] !== false;
       el.classList.toggle("is-panel-hidden", !visible);
+      if (!visible && selectedPanelId === panelId) {
+        selectedPanelId = null;
+        el.classList.remove("is-panel-selected");
+      }
       if (visible) {
         applyPanelLayout(el, normalized[panelId]);
       }
     }
+    syncHideButtons();
+    resizeChartsNow();
     dispatchLayoutChange();
   }
 
@@ -162,7 +203,9 @@ const DashboardGrid = (() => {
     applyPanelLayout(el, item);
     ViewsModel.setPanelLayout(ViewsModel.currentView, selectedPanelId, item);
     syncWidthButtons();
-    scheduleLayoutChange();
+    resizeChartsNow();
+    dispatchLayoutChange();
+    scheduleLayoutSave();
   }
 
   function reorderPanel(panelId, targetPanelId) {
@@ -193,7 +236,8 @@ const DashboardGrid = (() => {
       if (!el || el.classList.contains("is-panel-hidden")) continue;
       applyPanelLayout(el, normalizeLayoutItem(id, nextLayout[id]));
     }
-    scheduleLayoutChange();
+    dispatchLayoutChange();
+    scheduleLayoutSave();
   }
 
   function bindEditInteractions() {
@@ -201,6 +245,18 @@ const DashboardGrid = (() => {
 
     gridEl.addEventListener("click", (event) => {
       if (!editMode) return;
+      const hideBtn = event.target.closest(".layout-panel-hide-btn");
+      if (hideBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const panel = hideBtn.closest("[data-panel]");
+        if (panel) {
+          window.dispatchEvent(new CustomEvent("nm:panel-hide", {
+            detail: { panelId: panel.dataset.panel },
+          }));
+        }
+        return;
+      }
       const panel = event.target.closest("[data-panel]");
       if (!panel || panel.classList.contains("is-panel-hidden")) return;
       selectPanel(panel.dataset.panel);
@@ -261,13 +317,15 @@ const DashboardGrid = (() => {
         el.classList.remove("is-panel-selected", "is-panel-dragging", "is-panel-drop-target");
         el.removeAttribute("draggable");
       }
-      scheduleLayoutChange();
+      syncHideButtons();
+      scheduleLayoutSave();
       return;
     }
 
     for (const el of gridEl.querySelectorAll("[data-panel]:not(.is-panel-hidden)")) {
       el.setAttribute("draggable", "true");
     }
+    syncHideButtons();
   }
 
   function isEditMode() {

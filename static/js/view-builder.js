@@ -106,6 +106,14 @@ const ViewBuilder = (() => {
     onLayoutApplied?.();
   }
 
+  function hidePanel(panelId) {
+    if (!draftVisibility || !panelId) return;
+    draftVisibility[panelId] = false;
+    applyDraftVisibility();
+    renderPanelGroups();
+    if (layoutEditMode) DG.setEditMode(true);
+  }
+
   function commitDraftVisibility() {
     if (!draftVisibility) return;
     for (const { id } of VM.PANEL_DEFS) {
@@ -141,6 +149,18 @@ const ViewBuilder = (() => {
     if (open) renderPanelGroups();
   }
 
+  function isNarrowLayoutViewport() {
+    return window.innerWidth < DG.SINGLE_COLUMN_BREAKPOINT;
+  }
+
+  function syncEditBarForViewport() {
+    const narrow = isNarrowLayoutViewport();
+    if (els.editWidthPresets) els.editWidthPresets.hidden = narrow;
+    if (els.widthNarrowHint) {
+      els.widthNarrowHint.hidden = !layoutEditMode || !narrow;
+    }
+  }
+
   function enterEditMode() {
     if (layoutEditMode) return;
     layoutEditMode = true;
@@ -155,6 +175,7 @@ const ViewBuilder = (() => {
     if (els.editViewName) {
       els.editViewName.textContent = VM.getViewLabel(VM.currentView);
     }
+    syncEditBarForViewport();
   }
 
   function exitEditMode() {
@@ -334,6 +355,13 @@ const ViewBuilder = (() => {
     if (new URLSearchParams(location.search).get("layout") === "1") {
       requestAnimationFrame(enterEditMode);
     }
+
+    window.addEventListener("resize", syncEditBarForViewport);
+
+    window.addEventListener("nm:panel-hide", (e) => {
+      if (!layoutEditMode) return;
+      hidePanel(e.detail?.panelId);
+    });
   }
 
   function cacheElements() {
@@ -349,6 +377,7 @@ const ViewBuilder = (() => {
     els.editBar = $("layout-edit-bar");
     els.exitEditBtn = $("layout-exit-edit");
     els.editWidthPresets = $("layout-edit-width-presets");
+    els.widthNarrowHint = $("layout-width-narrow-hint");
     els.editViewName = $("layout-edit-view-name");
     els.panelsToggle = $("layout-panels-toggle");
     els.panelsPopover = $("layout-panels-popover");

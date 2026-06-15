@@ -16,7 +16,7 @@ module.exports = defineConfig({
   webServer: {
     command: "python -m src.server",
     url: "http://127.0.0.1:8080",
-    reuseExistingServer: true,
+    reuseExistingServer: !process.env.CI,
     timeout: 120000,
   },
 });

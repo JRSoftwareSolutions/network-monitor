@@ -5,7 +5,7 @@ window.DashboardRender = (() => {
   const R = window.DashboardRating;
   const Sparkline = window.DashboardSparkline;
   const { dash, fmt, fmtMs, fmtPct, timeOfDay, hhmm, duration, escapeHtml, $, setText } = F;
-  const { COLORS, SCALE, ratePing, rateJitter, applyAccent, bucketQuality, INDICATOR_KEYS } = R;
+  const { COLORS, SCALE, ratePing, rateJitter, applyAccent, bucketQuality, INDICATOR_KEYS, GRID } = R;
 
   let appState = null;
 
@@ -284,6 +284,57 @@ window.DashboardRender = (() => {
     }
   }
 
+  function barColor(b) {
+    const q = bucketQuality(b);
+    if (q === "poor") return COLORS.bad;
+    if (q === "fair") return COLORS.okay;
+    if (q === "good") return COLORS.great;
+    return GRID;
+  }
+
+  function renderBlocksChart(blocks) {
+    const plot = $("blocks-plot");
+    const yAxis = $("blocks-y-axis");
+    const xAxis = $("blocks-x-axis");
+    if (!plot || !yAxis || !xAxis) return;
+
+    const buckets = (blocks && blocks.buckets) || [];
+    const values = buckets
+      .filter((b) => b.sample_count && b.avg_ms != null)
+      .map((b) => Number(b.avg_ms));
+    const peak = values.length ? Math.max(...values) : 0;
+    const yMax = Math.max(10, Math.ceil(peak / 10) * 10);
+
+    yAxis.innerHTML = [yMax, Math.round(yMax / 2), 0]
+      .map((v) => `<span>${v}</span>`)
+      .join("");
+
+    plot.innerHTML = "";
+    for (const b of buckets) {
+      const bar = document.createElement("span");
+      bar.className = "blocks-bar";
+      const hasData = b.sample_count && b.avg_ms != null;
+      if (hasData) {
+        const heightPct = Math.max(2, (Number(b.avg_ms) / yMax) * 100);
+        bar.style.height = `${heightPct}%`;
+        bar.style.background = barColor(b);
+      }
+      bar.title = hasData
+        ? `${hhmm(b.ts_start)} · avg ${fmtMs(b.avg_ms)} ms`
+        : `${hhmm(b.ts_start)} · no data`;
+      plot.appendChild(bar);
+    }
+
+    xAxis.innerHTML = "";
+    const tickCount = Math.min(6, buckets.length);
+    for (let i = 0; i < tickCount; i++) {
+      const idx = tickCount === 1 ? 0 : Math.round((i * (buckets.length - 1)) / (tickCount - 1));
+      const label = document.createElement("span");
+      label.textContent = hhmm(buckets[idx].ts_start);
+      xAxis.appendChild(label);
+    }
+  }
+
   function renderOutages(outages) {
     const body = $("outages-table");
     outages = outages || [];
@@ -342,6 +393,7 @@ window.DashboardRender = (() => {
     renderStats,
     renderHealth,
     renderTimeline,
+    renderBlocksChart,
     renderOutages,
     renderRecent,
     updateIndicatorSparklines,

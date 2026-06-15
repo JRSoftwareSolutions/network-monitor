@@ -20,19 +20,28 @@
   const state = {
     windowMinutes: 30,
     lastSampleTs: null,
+    lastNow: null,
     lastUpdatedAt: 0,
     lastFullRefreshAt: 0,
+    lastChartDataAt: 0,
+    lastHiddenAt: 0,
+    lastGraphPayload: null,
     config: null,
-    pollTimer: null,
-    connTimer: null,
-    stalenessTimer: null,
-    pollIntervalMs: 1000,
-    fullRefreshMs: 60000,
-    connRefreshMs: 120000,
     sparklineNow: null,
     indicatorSeries: null,
     heartbeatSamples: [],
-    lastGraphPayload: null,
+    pollIntervalMs: 1000,
+    fullRefreshMs: 60000,
+    connRefreshMs: 120000,
+    pollTimer: null,
+    pollInFlight: false,
+    pollAbortController: null,
+    pollPending: null,
+    pollSequencing: false,
+    recoveryTimer: null,
+    activateTimer: null,
+    connTimer: null,
+    stalenessTimer: null,
   };
 
   DR.bindState(state);
@@ -50,6 +59,17 @@
 
   function recentSamples(payload) {
     return payload.recent_samples || payload.samples || [];
+  }
+
+  function chartKnownTs() {
+    if (!state.lastGraphPayload) return state.lastSampleTs;
+    const line = DC.chartLineSamples(state.lastGraphPayload);
+    if (line.length) return line[line.length - 1].ts;
+    return state.lastSampleTs;
+  }
+
+  function syncChartKnownTs() {
+    state.lastSampleTs = chartKnownTs() ?? state.lastSampleTs;
   }
 
   function renderLiveSections(payload) {
@@ -71,21 +91,43 @@
     DR.renderStats(payload.stats);
     DR.renderHealth(payload.health);
     DR.renderTimeline(payload.blocks);
+    DR.renderBlocksChart(payload.blocks);
     DR.renderOutages(payload.outages);
     DR.renderRecent(recentSamples(payload));
     DC.updateCharts(payload);
   }
 
+  function patchGraphChartsFromLive(livePayload) {
+    if (!state.lastGraphPayload) return;
+    state.lastGraphPayload = {
+      ...state.lastGraphPayload,
+      window_minutes: state.windowMinutes,
+      latest_ts: livePayload.latest_ts ?? state.lastGraphPayload.latest_ts,
+      recent_samples: livePayload.recent_samples ?? [],
+      now: livePayload.now
+        ? { ...state.lastGraphPayload.now, ...livePayload.now }
+        : state.lastGraphPayload.now,
+    };
+    DC.updateCharts(state.lastGraphPayload);
+    state.lastChartDataAt = Date.now();
+  }
+
   function applyMetrics(payload, { full = false } = {}) {
+    if (payload.now) state.lastNow = payload.now;
     renderLiveSections(payload);
 
     if (full) {
       renderGraphSections(payload);
       state.lastFullRefreshAt = Date.now();
+    } else {
+      patchGraphChartsFromLive(payload);
     }
 
-    state.lastSampleTs = payload.latest_ts ?? state.lastSampleTs;
     state.lastUpdatedAt = Date.now();
+    if (full || payload.recent_samples?.length) {
+      state.lastChartDataAt = Date.now();
+    }
+    syncChartKnownTs();
     updateStaleness();
     const has = Boolean(recentSamples(payload).length || (payload.samples || []).length);
     setStatusPill(has ? "live" : "waiting", has ? "Live" : "Waiting for data...");
@@ -102,30 +144,146 @@
     return forceFull || !state.lastFullRefreshAt || graphRefreshDue();
   }
 
-  async function fetchJson(url, options) {
-    const res = await fetch(url, options);
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return res.json();
+  async function fetchJson(url, options = {}) {
+    const timeoutMs = 10000;
+    const timeoutController = new AbortController();
+    const timeoutId = setTimeout(() => timeoutController.abort(), timeoutMs);
+    const outerSignal = options.signal;
+    const onOuterAbort = () => timeoutController.abort();
+    if (outerSignal) {
+      if (outerSignal.aborted) {
+        clearTimeout(timeoutId);
+        throw new DOMException("Aborted", "AbortError");
+      }
+      outerSignal.addEventListener("abort", onOuterAbort, { once: true });
+    }
+    try {
+      const res = await fetch(url, { ...options, signal: timeoutController.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    } finally {
+      clearTimeout(timeoutId);
+      if (outerSignal) outerSignal.removeEventListener("abort", onOuterAbort);
+    }
   }
 
-  async function poll(forceFull) {
-    try {
-      const full = needFullRefresh(forceFull);
-      if (full) {
-        const params = new URLSearchParams({ windowMinutes: String(state.windowMinutes) });
-        const payload = await fetchJson(`/api/metrics?${params.toString()}`);
-        applyMetrics(payload, { full: true });
-        return;
-      }
+  let activePollPromise = null;
 
-      const knownTs = state.lastSampleTs ? `?knownTs=${encodeURIComponent(state.lastSampleTs)}` : "";
-      const live = await fetchJson(`/api/metrics/live${knownTs}`);
-      if (live.unchanged) return;
-      applyMetrics(live, { full: false });
-    } catch (err) {
-      console.error(err);
-      setStatusPill("error", "Connection error");
+  function queuePollIntent(intent) {
+    const rank = { live: 1, activate: 2, full: 3 };
+    const current = state.pollPending;
+    if (!current || rank[intent] >= rank[current]) state.pollPending = intent;
+  }
+
+  function requestPoll(forceFull) {
+    if (state.pollInFlight) {
+      if (forceFull) {
+        state.pollAbortController?.abort();
+        queuePollIntent("full");
+      } else {
+        queuePollIntent("live");
+      }
+      return activePollPromise ?? Promise.resolve();
     }
+    activePollPromise = runPoll(forceFull);
+    return activePollPromise;
+  }
+
+  async function fetchMetricsCycle(forceFull, signal) {
+    const fetchOpts = { signal };
+    if (needFullRefresh(forceFull)) {
+      const params = new URLSearchParams({ windowMinutes: String(state.windowMinutes) });
+      const payload = await fetchJson(`/api/metrics?${params.toString()}`, fetchOpts);
+      applyMetrics(payload, { full: true });
+      return;
+    }
+
+    const known = chartKnownTs();
+    const knownTs = known ? `?knownTs=${encodeURIComponent(known)}` : "";
+    const live = await fetchJson(`/api/metrics/live${knownTs}`, fetchOpts);
+    if (live.unchanged) {
+      state.lastUpdatedAt = Date.now();
+      updateStaleness();
+      if (live.now?.display_verdict && state.lastNow) {
+        DR.renderHero({ ...state.lastNow, display_verdict: live.now.display_verdict });
+      }
+      return;
+    }
+    applyMetrics(live, { full: false });
+  }
+
+  async function runPoll(forceFull) {
+    if (state.pollInFlight) return;
+    state.pollInFlight = true;
+    let nextForceFull = forceFull;
+    try {
+      do {
+        const retryFull = state.pollPending === "full";
+        state.pollPending = null;
+        const force = nextForceFull || retryFull;
+        nextForceFull = false;
+
+        const abortController = new AbortController();
+        state.pollAbortController = abortController;
+        try {
+          await fetchMetricsCycle(force, abortController.signal);
+        } catch (err) {
+          if (err?.name === "AbortError") continue;
+          console.error(err);
+          setStatusPill("error", "Connection error");
+        } finally {
+          state.pollAbortController = null;
+        }
+      } while (state.pollPending === "full");
+    } finally {
+      state.pollInFlight = false;
+      activePollPromise = null;
+      if (state.pollSequencing) return;
+      const pending = state.pollPending;
+      state.pollPending = null;
+      if (pending === "activate") {
+        void catchUpPoll({ repaint: true });
+      } else if (pending === "full") {
+        void requestPoll(true);
+      } else if (pending === "live") {
+        void requestPoll(false);
+      }
+    }
+  }
+
+  async function awaitIdlePoll() {
+    if (!state.pollInFlight) return;
+    state.pollAbortController?.abort();
+    await (activePollPromise ?? Promise.resolve());
+  }
+
+  async function runPollSequence(forceFull, thenLive) {
+    state.pollSequencing = true;
+    try {
+      await runPoll(forceFull);
+      if (thenLive) await runPoll(false);
+    } finally {
+      state.pollSequencing = false;
+      const pending = state.pollPending;
+      state.pollPending = null;
+      if (pending === "activate") {
+        void catchUpPoll({ repaint: true });
+      } else if (pending === "full") {
+        void requestPoll(true);
+      } else if (pending === "live") {
+        void requestPoll(false);
+      }
+    }
+  }
+
+  async function catchUpPoll({ resetFull = false, repaint = false } = {}) {
+    clearTimeout(state.pollTimer);
+    if (resetFull) state.lastFullRefreshAt = 0;
+    await awaitIdlePoll();
+    const forceFull = resetFull || isPollStale() || hiddenLongEnough();
+    await runPollSequence(forceFull, forceFull);
+    schedulePoll();
+    if (repaint) refreshCharts();
   }
 
   async function refreshConnection() {
@@ -151,16 +309,50 @@
 
   function schedulePoll() {
     clearTimeout(state.pollTimer);
-    state.pollTimer = setTimeout(async () => { await poll(false); schedulePoll(); }, nextPollDelayMs());
+    state.pollTimer = setTimeout(async () => {
+      await requestPoll(false);
+      schedulePoll();
+    }, nextPollDelayMs());
   }
 
-  function resumeDashboard() {
-    clearTimeout(state.pollTimer);
-    poll(true).finally(() => {
-      schedulePoll();
+  function pollStaleThresholdMs() {
+    return Math.max(state.pollIntervalMs * 2, 3000);
+  }
+
+  function isPollStale() {
+    return !state.lastChartDataAt
+      || Date.now() - state.lastChartDataAt > pollStaleThresholdMs();
+  }
+
+  function hiddenLongEnough() {
+    return state.lastHiddenAt > 0 && Date.now() - state.lastHiddenAt > 2000;
+  }
+
+  function onWindowDeactivated() {
+    state.lastHiddenAt = Date.now();
+  }
+
+  function onWindowActivated() {
+    if (document.hidden) return;
+    clearTimeout(state.activateTimer);
+    state.activateTimer = setTimeout(() => {
+      state.activateTimer = null;
       refreshCharts();
-      requestAnimationFrame(refreshCharts);
-    });
+      if (state.pollInFlight) {
+        queuePollIntent("activate");
+        return;
+      }
+      void catchUpPoll({ repaint: true });
+    }, 50);
+  }
+
+  function schedulePollRecovery() {
+    clearInterval(state.recoveryTimer);
+    state.recoveryTimer = setInterval(() => {
+      if (state.pollInFlight || !isPollStale()) return;
+      clearTimeout(state.pollTimer);
+      requestPoll(needFullRefresh(false)).finally(() => schedulePoll());
+    }, 2000);
   }
 
   function scheduleConnection() {
@@ -185,7 +377,9 @@
 
   function applyConfig(config) {
     const prevFullRefreshMs = state.fullRefreshMs;
+    const prevTarget = state.config?.target;
     state.config = config;
+    if (config.target !== prevTarget) state.lastSampleTs = null;
     if (window.DashboardRating && config.gaming_thresholds) {
       window.DashboardRating.applyThresholds(config.gaming_thresholds);
     }
@@ -287,7 +481,8 @@
         }
         applyConfig(await res.json());
         close();
-        poll(true);
+        clearTimeout(state.pollTimer);
+        await catchUpPoll({ resetFull: true, repaint: true });
       } catch (err) {
         console.error(err);
         errorEl.textContent = "Could not reach the server - settings not saved";
@@ -298,13 +493,15 @@
   }
 
   function refreshCharts() {
-    DC.resizeCharts();
-    if (state.lastGraphPayload) {
-      DC.updateCharts(state.lastGraphPayload);
-    } else {
+    DC.layoutSettledRefresh(() => {
+      if (state.lastGraphPayload) {
+        DC.updateCharts(state.lastGraphPayload);
+        DR.renderTimeline(state.lastGraphPayload.blocks);
+        DR.renderBlocksChart(state.lastGraphPayload.blocks);
+      }
       DC.redrawCharts();
-    }
-    DR.updateIndicatorSparklines(state.sparklineNow, state.indicatorSeries);
+      DR.updateIndicatorSparklines(state.sparklineNow, state.indicatorSeries);
+    });
   }
 
   window.addEventListener("nm:layout-change", refreshCharts);
@@ -329,23 +526,35 @@
     $("window-select").addEventListener("change", (e) => {
       state.windowMinutes = Number(e.target.value);
       localStorage.setItem(ViewsModel.STORAGE_KEYS.windowMinutes, e.target.value);
-      poll(true);
+      state.lastFullRefreshAt = 0;
+      state.lastSampleTs = null;
+      clearTimeout(state.pollTimer);
+      void catchUpPoll({ resetFull: true, repaint: true });
     });
 
-    await Promise.all([poll(true), refreshConnection()]);
+    await Promise.all([runPoll(true), refreshConnection()]);
+    if (!state.lastChartDataAt) state.lastChartDataAt = Date.now();
     schedulePoll();
     scheduleConnection();
     state.stalenessTimer = setInterval(updateStaleness, 1000);
+    schedulePollRecovery();
     refreshCharts();
 
     document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) resumeDashboard();
+      if (document.hidden) onWindowDeactivated();
+      else onWindowActivated();
     });
+    window.addEventListener("focus", onWindowActivated);
+    window.addEventListener("blur", onWindowDeactivated);
+  }
+
+  async function startDashboard() {
+    await bootstrap();
   }
 
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", bootstrap);
+    document.addEventListener("DOMContentLoaded", () => { startDashboard(); });
   } else {
-    bootstrap();
+    startDashboard();
   }
 })();

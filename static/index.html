@@ -8,7 +8,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/dashboard.css?v=26">
+  <link rel="stylesheet" href="/static/css/dashboard-base.css?v=30">
+  <link rel="stylesheet" href="/static/css/dashboard-panels.css?v=30">
+  <link rel="stylesheet" href="/static/css/dashboard-content.css?v=30">
+  <link rel="stylesheet" href="/static/css/dashboard-overlays.css?v=27">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 </head>
@@ -30,6 +33,8 @@
             <span id="connection-label">-</span>
             <span class="dot" aria-hidden="true"></span>
             target <b class="mono" id="target-label">-</b>
+            <span class="dot" aria-hidden="true"></span>
+            <span class="mono brand-updated" id="updated-pill" title="Time since last update">-</span>
           </p>
         </div>
       </div>
@@ -61,7 +66,6 @@
           <span class="live-dot" aria-hidden="true"></span>
           <span id="status-text">Connecting...</span>
         </span>
-        <span class="pill mono" id="updated-pill" title="Time since last update">-</span>
         <label class="field">
           <span>Window</span>
           <select id="window-select" aria-label="Time window"></select>
@@ -250,7 +254,16 @@
         <section class="card">
             <div class="card-head"><div><h2>Connection quality timeline</h2><p>Each cell = 1 minute · green good · amber fair · red poor</p></div></div>
             <div class="timeline" id="quality-timeline"></div>
-            <div class="chart-wrap short"><canvas id="blocks-chart"></canvas></div>
+            <div class="blocks-chart" id="blocks-chart">
+              <div class="blocks-chart__y-col">
+                <span class="blocks-chart__ylabel">avg ms</span>
+                <div class="blocks-chart__y" id="blocks-y-axis"></div>
+              </div>
+              <div class="blocks-chart__main">
+                <div class="blocks-chart__plot" id="blocks-plot"></div>
+                <div class="blocks-chart__x" id="blocks-x-axis"></div>
+              </div>
+            </div>
           </section>
       </div>
 
@@ -285,7 +298,7 @@
   <div id="layout-edit-bar" class="layout-edit-bar" hidden>
     <span class="layout-edit-bar__hint">
       Editing <strong id="layout-edit-view-name">Default</strong>
-      · click a panel to select · drag to reorder
+      · click a panel to select · drag to reorder · hide icon removes a panel
     </span>
     <div class="layout-edit-bar__actions">
       <div class="layout-panels-menu">
@@ -309,6 +322,7 @@
         <button type="button" class="layout-width-btn" data-width="6" title="Half">6</button>
         <button type="button" class="layout-width-btn" data-width="4" title="Third">4</button>
       </div>
+      <span id="layout-width-narrow-hint" class="layout-width-narrow-hint" hidden>Narrow screen — panels are full width</span>
       <button type="button" id="layout-reset-layout" class="btn btn-ghost">Reset layout</button>
       <button type="button" id="layout-exit-edit" class="btn btn-accent">Done</button>
     </div>
@@ -386,13 +400,13 @@
   </div>
 
   <script src="/static/js/views-model.js?v=4"></script>
-  <script src="/static/js/dashboard-grid.js?v=3"></script>
+  <script src="/static/js/dashboard-grid.js?v=5"></script>
   <script src="/static/js/dashboard-format.js?v=1"></script>
-  <script src="/static/js/view-builder.js?v=3"></script>
+  <script src="/static/js/view-builder.js?v=4"></script>
   <script src="/static/js/dashboard-rating.js?v=2"></script>
-  <script src="/static/js/dashboard-sparkline.js?v=1"></script>
-  <script src="/static/js/dashboard-render.js?v=2"></script>
-  <script src="/static/js/dashboard-charts.js?v=2"></script>
-  <script src="/static/js/dashboard.js?v=14"></script>
+  <script src="/static/js/dashboard-sparkline.js?v=2"></script>
+  <script src="/static/js/dashboard-render.js?v=3"></script>
+  <script src="/static/js/dashboard-charts.js?v=6"></script>
+  <script src="/static/js/dashboard.js?v=21"></script>
 </body>
 </html>

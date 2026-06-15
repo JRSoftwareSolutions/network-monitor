@@ -59,6 +59,7 @@ export function loadDashboardGridGlobals(options = {}) {
 function makePanelElement(panelId, { w = 12, order = 0, hidden = false } = {}) {
   const classes = new Set([`span-${w}`]);
   if (hidden) classes.add("is-panel-hidden");
+  const children = [];
   const el = {
     dataset: { panel: panelId },
     classList: {
@@ -71,6 +72,11 @@ function makePanelElement(panelId, { w = 12, order = 0, hidden = false } = {}) {
     style: { order: String(order) },
     removeAttribute: () => {},
     setAttribute: () => {},
+    querySelector: (sel) => children.find((c) => c.matches?.(sel)) ?? null,
+    appendChild: (child) => {
+      children.push(child);
+      return child;
+    },
   };
   return el;
 }

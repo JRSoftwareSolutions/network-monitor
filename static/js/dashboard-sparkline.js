@@ -6,8 +6,11 @@ window.DashboardSparkline = (() => {
 
   function draw(canvas, values, opts) {
     if (!canvas) return;
+    const wrap = canvas.parentElement;
+    if (!wrap) return;
     const dpr = window.devicePixelRatio || 1;
-    const rect = canvas.getBoundingClientRect();
+    const rect = wrap.getBoundingClientRect();
+    if (rect.width === 0 && rect.height === 0) return;
     const width = Math.max(1, rect.width);
     const height = Math.max(1, rect.height);
     canvas.width = Math.round(width * dpr);

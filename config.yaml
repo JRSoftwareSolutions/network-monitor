@@ -1,5 +1,5 @@
 target: 1.1.1.1
-ping_interval_seconds: 5
+ping_interval_seconds: 1
 log_file: logs/metrics.jsonl
 server_host: 127.0.0.1
 server_port: 8080
@@ -8,5 +8,5 @@ max_log_age_minutes: 180
 archive_enabled: true
 max_log_size_mb: 1
 archive_dir: logs/archive
-full_refresh_seconds: 5
+full_refresh_seconds: 1
 connection_refresh_seconds: 120
