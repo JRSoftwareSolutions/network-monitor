@@ -19,9 +19,9 @@
     onsave?: (values: { target: string; ping_interval_seconds: number; retention_minutes: number }) => void;
   } = $props();
 
-  let draftTarget = $state(target);
-  let draftInterval = $state(pingInterval);
-  let draftRetention = $state(retention);
+  let draftTarget = $state("");
+  let draftInterval = $state(1);
+  let draftRetention = $state(180);
 
   $effect(() => {
     if (open) {
