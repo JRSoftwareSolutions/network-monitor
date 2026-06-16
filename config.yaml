@@ -8,5 +8,4 @@ max_log_age_minutes: 180
 archive_enabled: true
 max_log_size_mb: 1
 archive_dir: logs/archive
-full_refresh_seconds: 1
 connection_refresh_seconds: 120

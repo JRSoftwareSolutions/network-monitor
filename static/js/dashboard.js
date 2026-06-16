@@ -7,6 +7,7 @@
   const F = window.DashboardFormat;
   const DR = window.DashboardRender;
   const DC = window.DashboardCharts;
+  const Sync = window.DashboardMetricsSync;
   const { dash, agoText, $, setText } = F;
 
   const TARGET_PRESETS = [
@@ -22,23 +23,15 @@
     lastSampleTs: null,
     lastNow: null,
     lastUpdatedAt: 0,
-    lastFullRefreshAt: 0,
     lastChartDataAt: 0,
     lastHiddenAt: 0,
-    lastGraphPayload: null,
+    lastMetricsPayload: null,
     config: null,
     sparklineNow: null,
     indicatorSeries: null,
     heartbeatSamples: [],
     pollIntervalMs: 1000,
-    fullRefreshMs: 60000,
     connRefreshMs: 120000,
-    pollTimer: null,
-    pollInFlight: false,
-    pollAbortController: null,
-    pollPending: null,
-    pollSequencing: false,
-    recoveryTimer: null,
     activateTimer: null,
     connTimer: null,
     stalenessTimer: null,
@@ -61,20 +54,10 @@
     return payload.recent_samples || payload.samples || [];
   }
 
-  function chartKnownTs() {
-    if (!state.lastGraphPayload) return state.lastSampleTs;
-    const line = DC.chartLineSamples(state.lastGraphPayload);
-    if (line.length) return line[line.length - 1].ts;
-    return state.lastSampleTs;
-  }
-
-  function syncChartKnownTs() {
-    state.lastSampleTs = chartKnownTs() ?? state.lastSampleTs;
-  }
-
   function renderLiveSections(payload) {
     const now = payload.now || {};
     const samples = recentSamples(payload);
+    state.sparklineNow = now;
     state.indicatorSeries = payload.indicator_series || null;
     DR.renderHero(now);
     DR.renderStatus(now);
@@ -84,64 +67,72 @@
     DR.updateIndicatorSparklines(now, payload.indicator_series);
   }
 
-  function renderGraphSections(payload) {
-    state.lastGraphPayload = payload;
-    const windowMins = payload.window_minutes ?? state.windowMinutes;
-    setText("window-label", String(windowMins));
+  function renderGraphPanels(payload) {
+    setText("window-label", String(payload.window_minutes ?? state.windowMinutes));
     DR.renderStats(payload.stats);
     DR.renderHealth(payload.health);
-    DR.renderTimeline(payload.blocks);
-    DR.renderBlocksChart(payload.blocks);
     DR.renderOutages(payload.outages);
     DR.renderRecent(recentSamples(payload));
-    DC.updateCharts(payload);
   }
 
-  function patchGraphChartsFromLive(livePayload) {
-    if (!state.lastGraphPayload) return;
-    state.lastGraphPayload = {
-      ...state.lastGraphPayload,
-      window_minutes: state.windowMinutes,
-      latest_ts: livePayload.latest_ts ?? state.lastGraphPayload.latest_ts,
-      recent_samples: livePayload.recent_samples ?? [],
-      now: livePayload.now
-        ? { ...state.lastGraphPayload.now, ...livePayload.now }
-        : state.lastGraphPayload.now,
+  /** Sole path that touches Chart.js canvases and graph DOM panels. */
+  function paintGraphs({ waitForLayout = false } = {}) {
+    const payload = state.lastMetricsPayload;
+    if (!payload) return;
+
+    const draw = () => {
+      DC.resizeCharts();
+      DC.updateCharts(payload);
+      DR.renderTimeline(payload.blocks);
+      DR.renderBlocksChart(payload.blocks);
+      DC.redrawCharts();
+      DR.updateIndicatorSparklines(state.sparklineNow, state.indicatorSeries);
     };
-    DC.updateCharts(state.lastGraphPayload);
-    state.lastChartDataAt = Date.now();
+
+    if (waitForLayout) {
+      DC.layoutSettledRefresh(draw);
+    } else {
+      draw();
+    }
   }
 
-  function applyMetrics(payload, { full = false } = {}) {
+  /** Sole entry point for metrics sync (full payload or unchanged tick). */
+  function ingestMetrics(payload) {
+    if (payload.unchanged) {
+      state.lastUpdatedAt = Date.now();
+      updateStaleness();
+      if (payload.now?.display_verdict && state.lastNow) {
+        DR.renderHero({ ...state.lastNow, display_verdict: payload.now.display_verdict });
+      }
+      return;
+    }
+
+    state.lastMetricsPayload = payload;
     if (payload.now) state.lastNow = payload.now;
-    renderLiveSections(payload);
-
-    if (full) {
-      renderGraphSections(payload);
-      state.lastFullRefreshAt = Date.now();
-    } else {
-      patchGraphChartsFromLive(payload);
-    }
-
+    if (payload.latest_ts) state.lastSampleTs = payload.latest_ts;
     state.lastUpdatedAt = Date.now();
-    if (full || payload.recent_samples?.length) {
-      state.lastChartDataAt = Date.now();
-    }
-    syncChartKnownTs();
+    state.lastChartDataAt = Date.now();
+
+    renderLiveSections(payload);
+    renderGraphPanels(payload);
     updateStaleness();
     const has = Boolean(recentSamples(payload).length || (payload.samples || []).length);
     setStatusPill(has ? "live" : "waiting", has ? "Live" : "Waiting for data...");
+
+    paintGraphs();
   }
 
-  function graphRefreshDue() {
-    return Boolean(
-      state.lastFullRefreshAt
-      && Date.now() - state.lastFullRefreshAt >= state.fullRefreshMs,
-    );
-  }
-
-  function needFullRefresh(forceFull) {
-    return forceFull || !state.lastFullRefreshAt || graphRefreshDue();
+  async function refreshConnection() {
+    try {
+      const c = await fetchJson("/api/connection");
+      let label = "Unknown connection";
+      if (c.type && c.name) label = `${c.type} · ${c.name}`;
+      else if (c.type) label = c.type;
+      else if (c.name) label = c.name;
+      setText("connection-label", label);
+    } catch (err) {
+      console.error("connection refresh failed", err);
+    }
   }
 
   async function fetchJson(url, options = {}) {
@@ -167,194 +158,6 @@
     }
   }
 
-  let activePollPromise = null;
-
-  function queuePollIntent(intent) {
-    const rank = { live: 1, activate: 2, full: 3 };
-    const current = state.pollPending;
-    if (!current || rank[intent] >= rank[current]) state.pollPending = intent;
-  }
-
-  function requestPoll(forceFull) {
-    if (state.pollInFlight) {
-      if (forceFull) {
-        state.pollAbortController?.abort();
-        queuePollIntent("full");
-      } else {
-        queuePollIntent("live");
-      }
-      return activePollPromise ?? Promise.resolve();
-    }
-    activePollPromise = runPoll(forceFull);
-    return activePollPromise;
-  }
-
-  async function fetchMetricsCycle(forceFull, signal) {
-    const fetchOpts = { signal };
-    if (needFullRefresh(forceFull)) {
-      const params = new URLSearchParams({ windowMinutes: String(state.windowMinutes) });
-      const payload = await fetchJson(`/api/metrics?${params.toString()}`, fetchOpts);
-      applyMetrics(payload, { full: true });
-      return;
-    }
-
-    const known = chartKnownTs();
-    const knownTs = known ? `?knownTs=${encodeURIComponent(known)}` : "";
-    const live = await fetchJson(`/api/metrics/live${knownTs}`, fetchOpts);
-    if (live.unchanged) {
-      state.lastUpdatedAt = Date.now();
-      updateStaleness();
-      if (live.now?.display_verdict && state.lastNow) {
-        DR.renderHero({ ...state.lastNow, display_verdict: live.now.display_verdict });
-      }
-      return;
-    }
-    applyMetrics(live, { full: false });
-  }
-
-  async function runPoll(forceFull) {
-    if (state.pollInFlight) return;
-    state.pollInFlight = true;
-    let nextForceFull = forceFull;
-    try {
-      do {
-        const retryFull = state.pollPending === "full";
-        state.pollPending = null;
-        const force = nextForceFull || retryFull;
-        nextForceFull = false;
-
-        const abortController = new AbortController();
-        state.pollAbortController = abortController;
-        try {
-          await fetchMetricsCycle(force, abortController.signal);
-        } catch (err) {
-          if (err?.name === "AbortError") continue;
-          console.error(err);
-          setStatusPill("error", "Connection error");
-        } finally {
-          state.pollAbortController = null;
-        }
-      } while (state.pollPending === "full");
-    } finally {
-      state.pollInFlight = false;
-      activePollPromise = null;
-      if (state.pollSequencing) return;
-      const pending = state.pollPending;
-      state.pollPending = null;
-      if (pending === "activate") {
-        void catchUpPoll({ repaint: true });
-      } else if (pending === "full") {
-        void requestPoll(true);
-      } else if (pending === "live") {
-        void requestPoll(false);
-      }
-    }
-  }
-
-  async function awaitIdlePoll() {
-    if (!state.pollInFlight) return;
-    state.pollAbortController?.abort();
-    await (activePollPromise ?? Promise.resolve());
-  }
-
-  async function runPollSequence(forceFull, thenLive) {
-    state.pollSequencing = true;
-    try {
-      await runPoll(forceFull);
-      if (thenLive) await runPoll(false);
-    } finally {
-      state.pollSequencing = false;
-      const pending = state.pollPending;
-      state.pollPending = null;
-      if (pending === "activate") {
-        void catchUpPoll({ repaint: true });
-      } else if (pending === "full") {
-        void requestPoll(true);
-      } else if (pending === "live") {
-        void requestPoll(false);
-      }
-    }
-  }
-
-  async function catchUpPoll({ resetFull = false, repaint = false } = {}) {
-    clearTimeout(state.pollTimer);
-    if (resetFull) state.lastFullRefreshAt = 0;
-    await awaitIdlePoll();
-    const forceFull = resetFull || isPollStale() || hiddenLongEnough();
-    await runPollSequence(forceFull, forceFull);
-    schedulePoll();
-    if (repaint) refreshCharts();
-  }
-
-  async function refreshConnection() {
-    try {
-      const c = await fetchJson("/api/connection");
-      let label = "Unknown connection";
-      if (c.type && c.name) label = `${c.type} · ${c.name}`;
-      else if (c.type) label = c.type;
-      else if (c.name) label = c.name;
-      setText("connection-label", label);
-    } catch (err) {
-      console.error("connection refresh failed", err);
-    }
-  }
-
-  function nextPollDelayMs() {
-    const pingDelay = state.pollIntervalMs;
-    if (!state.lastFullRefreshAt) return pingDelay;
-    const untilGraph = state.fullRefreshMs - (Date.now() - state.lastFullRefreshAt);
-    if (untilGraph <= 0) return 0;
-    return Math.min(pingDelay, untilGraph);
-  }
-
-  function schedulePoll() {
-    clearTimeout(state.pollTimer);
-    state.pollTimer = setTimeout(async () => {
-      await requestPoll(false);
-      schedulePoll();
-    }, nextPollDelayMs());
-  }
-
-  function pollStaleThresholdMs() {
-    return Math.max(state.pollIntervalMs * 2, 3000);
-  }
-
-  function isPollStale() {
-    return !state.lastChartDataAt
-      || Date.now() - state.lastChartDataAt > pollStaleThresholdMs();
-  }
-
-  function hiddenLongEnough() {
-    return state.lastHiddenAt > 0 && Date.now() - state.lastHiddenAt > 2000;
-  }
-
-  function onWindowDeactivated() {
-    state.lastHiddenAt = Date.now();
-  }
-
-  function onWindowActivated() {
-    if (document.hidden) return;
-    clearTimeout(state.activateTimer);
-    state.activateTimer = setTimeout(() => {
-      state.activateTimer = null;
-      refreshCharts();
-      if (state.pollInFlight) {
-        queuePollIntent("activate");
-        return;
-      }
-      void catchUpPoll({ repaint: true });
-    }, 50);
-  }
-
-  function schedulePollRecovery() {
-    clearInterval(state.recoveryTimer);
-    state.recoveryTimer = setInterval(() => {
-      if (state.pollInFlight || !isPollStale()) return;
-      clearTimeout(state.pollTimer);
-      requestPoll(needFullRefresh(false)).finally(() => schedulePoll());
-    }, 2000);
-  }
-
   function scheduleConnection() {
     clearTimeout(state.connTimer);
     state.connTimer = setTimeout(async () => { await refreshConnection(); scheduleConnection(); }, state.connRefreshMs);
@@ -376,7 +179,6 @@
   }
 
   function applyConfig(config) {
-    const prevFullRefreshMs = state.fullRefreshMs;
     const prevTarget = state.config?.target;
     state.config = config;
     if (config.target !== prevTarget) state.lastSampleTs = null;
@@ -387,10 +189,7 @@
     setText("target-label", config.target || dash);
     populateWindowOptions(config.window_options && config.window_options.length ? config.window_options : [5, 15, 30, 60, 120], config.default_window_minutes || 30);
     state.pollIntervalMs = Math.max(250, (config.ping_interval_seconds || 1) * 1000);
-    if (config.full_refresh_seconds != null) state.fullRefreshMs = config.full_refresh_seconds * 1000;
     if (config.connection_refresh_seconds != null) state.connRefreshMs = config.connection_refresh_seconds * 1000;
-    if (prevFullRefreshMs !== state.fullRefreshMs) state.lastFullRefreshAt = 0;
-    schedulePoll();
     scheduleConnection();
   }
 
@@ -424,7 +223,6 @@
 
     const fields = {
       pingInterval: $("set-ping-interval"),
-      fullRefresh: $("set-full-refresh"),
       connRefresh: $("set-conn-refresh"),
       logAge: $("set-log-age"),
     };
@@ -436,7 +234,6 @@
       customInput.value = preset ? "" : (c.target || "");
       syncCustom();
       fields.pingInterval.value = c.ping_interval_seconds ?? state.pollIntervalMs / 1000;
-      fields.fullRefresh.value = c.full_refresh_seconds ?? state.fullRefreshMs / 1000;
       fields.connRefresh.value = c.connection_refresh_seconds ?? state.connRefreshMs / 1000;
       fields.logAge.value = c.max_log_age_minutes ?? 180;
       errorEl.textContent = "";
@@ -461,7 +258,6 @@
       const payload = {
         target,
         ping_interval_seconds: Number(fields.pingInterval.value),
-        full_refresh_seconds: Number(fields.fullRefresh.value),
         connection_refresh_seconds: Number(fields.connRefresh.value),
         max_log_age_minutes: Math.round(Number(fields.logAge.value)),
       };
@@ -481,8 +277,7 @@
         }
         applyConfig(await res.json());
         close();
-        clearTimeout(state.pollTimer);
-        await catchUpPoll({ resetFull: true, repaint: true });
+        await Sync.reload();
       } catch (err) {
         console.error(err);
         errorEl.textContent = "Could not reach the server - settings not saved";
@@ -492,25 +287,40 @@
     });
   }
 
-  function refreshCharts() {
-    DC.layoutSettledRefresh(() => {
-      if (state.lastGraphPayload) {
-        DC.updateCharts(state.lastGraphPayload);
-        DR.renderTimeline(state.lastGraphPayload.blocks);
-        DR.renderBlocksChart(state.lastGraphPayload.blocks);
-      }
-      DC.redrawCharts();
-      DR.updateIndicatorSparklines(state.sparklineNow, state.indicatorSeries);
-    });
+  async function onWindowSelectChange(windowMinutes) {
+    state.windowMinutes = windowMinutes;
+    setText("window-label", String(windowMinutes));
+    await Sync.reload();
   }
 
-  window.addEventListener("nm:layout-change", refreshCharts);
+  function onWindowDeactivated() {
+    state.lastHiddenAt = Date.now();
+  }
+
+  function onWindowActivated() {
+    if (document.hidden) return;
+    clearTimeout(state.activateTimer);
+    state.activateTimer = setTimeout(() => {
+      state.activateTimer = null;
+      paintGraphs({ waitForLayout: true });
+      void Sync.fetchNow();
+    }, 50);
+  }
+
+  window.addEventListener("nm:layout-change", () => paintGraphs({ waitForLayout: true }));
 
   async function bootstrap() {
+    Sync.init({
+      getWindowMinutes: () => state.windowMinutes,
+      getPollIntervalMs: () => state.pollIntervalMs,
+      getLastChartDataAt: () => state.lastChartDataAt,
+      onPayload: ingestMetrics,
+      onError: () => setStatusPill("error", "Connection error"),
+      onStaleness: updateStaleness,
+    });
+
     if (window.ViewBuilder) {
-      ViewBuilder.init({
-        onLayoutApplied: refreshCharts,
-      });
+      ViewBuilder.init({ onLayoutApplied: () => paintGraphs({ waitForLayout: true }) });
     }
     try { DC.initCharts($); } catch (err) { console.error("chart init failed", err); }
     initSettings();
@@ -524,21 +334,15 @@
     }
 
     $("window-select").addEventListener("change", (e) => {
-      state.windowMinutes = Number(e.target.value);
+      const windowMinutes = Number(e.target.value);
       localStorage.setItem(ViewsModel.STORAGE_KEYS.windowMinutes, e.target.value);
-      state.lastFullRefreshAt = 0;
-      state.lastSampleTs = null;
-      clearTimeout(state.pollTimer);
-      void catchUpPoll({ resetFull: true, repaint: true });
+      void onWindowSelectChange(windowMinutes);
     });
 
-    await Promise.all([runPoll(true), refreshConnection()]);
+    await Promise.all([Sync.start(), refreshConnection()]);
     if (!state.lastChartDataAt) state.lastChartDataAt = Date.now();
-    schedulePoll();
     scheduleConnection();
     state.stalenessTimer = setInterval(updateStaleness, 1000);
-    schedulePollRecovery();
-    refreshCharts();
 
     document.addEventListener("visibilitychange", () => {
       if (document.hidden) onWindowDeactivated();

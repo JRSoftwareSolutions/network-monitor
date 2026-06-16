@@ -111,20 +111,6 @@ def _now_and_series(
     return now_payload, recent_samples, indicator_series
 
 
-def build_live_payload(monitor: PingMonitor, stabilizer: VerdictStabilizer) -> dict:
-    trend_samples = monitor.get_samples(trend_window_minutes())
-    latest = monitor.get_latest_sample()
-    now_payload, recent_samples, indicator_series = _now_and_series(
-        monitor, stabilizer, trend_samples
-    )
-    return {
-        "latest_ts": latest["ts"] if latest else None,
-        "recent_samples": recent_samples,
-        "indicator_series": indicator_series,
-        "now": now_payload,
-    }
-
-
 def build_metrics_payload(
     monitor: PingMonitor,
     stabilizer: VerdictStabilizer,

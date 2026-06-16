@@ -6,7 +6,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field, field_validator
 
-from src.api.payloads import build_live_payload, build_metrics_payload, tick_display_verdict
+from src.api.payloads import build_metrics_payload, tick_display_verdict
 from src.metrics.samples import parse_ts
 from src.metrics.constants import gaming_thresholds_payload
 from src.config import (
@@ -29,7 +29,7 @@ from src.metrics import (
     clamp_window_minutes,
     compute_window_options,
 )
-from src.api.cache import MetricsCache
+from src.api.cache import MetricsPayloadCache
 from src.platform.network_info import get_active_connection
 from src.monitoring.ping_monitor import PingMonitor
 
@@ -46,16 +46,13 @@ monitor = PingMonitor(
     archive_dir=config.archive_dir,
 )
 stabilizer = VerdictStabilizer()
-metrics_cache = MetricsCache()
+metrics_cache = MetricsPayloadCache()
 
 
 class SettingsUpdate(BaseModel):
     target: str | None = None
     ping_interval_seconds: float | None = Field(
         default=None, ge=MIN_PING_INTERVAL_SECONDS, le=MAX_PING_INTERVAL_SECONDS
-    )
-    full_refresh_seconds: float | None = Field(
-        default=None, ge=MIN_REFRESH_SECONDS, le=MAX_REFRESH_SECONDS
     )
     connection_refresh_seconds: float | None = Field(
         default=None, ge=MIN_REFRESH_SECONDS, le=MAX_REFRESH_SECONDS
@@ -111,7 +108,6 @@ def _config_payload() -> dict:
         "ping_interval_seconds": config.ping_interval_seconds,
         "max_log_age_minutes": config.max_log_age_minutes,
         "window_options": compute_window_options(config.max_log_age_minutes),
-        "full_refresh_seconds": config.full_refresh_seconds,
         "connection_refresh_seconds": config.connection_refresh_seconds,
         "gaming_thresholds": gaming_thresholds_payload(),
     }
@@ -128,8 +124,6 @@ async def api_update_config(update: SettingsUpdate):
         config.target = update.target
     if update.ping_interval_seconds is not None:
         config.ping_interval_seconds = clamp_ping_interval_seconds(update.ping_interval_seconds)
-    if update.full_refresh_seconds is not None:
-        config.full_refresh_seconds = clamp_refresh_seconds(update.full_refresh_seconds)
     if update.connection_refresh_seconds is not None:
         config.connection_refresh_seconds = clamp_refresh_seconds(
             update.connection_refresh_seconds
@@ -151,22 +145,6 @@ def api_connection():
     return get_active_connection()
 
 
-@app.get("/api/metrics/live")
-def api_metrics_live(knownTs: str | None = Query(default=None)):
-    latest = monitor.get_latest_sample()
-    latest_ts = latest["ts"] if latest else None
-    unchanged = maybe_unchanged(latest_ts, knownTs)
-    if unchanged is not None:
-        return {
-            **unchanged,
-            "now": {"display_verdict": tick_display_verdict(monitor, stabilizer)},
-        }
-    return metrics_cache.get_live(
-        latest_ts,
-        lambda: build_live_payload(monitor, stabilizer),
-    )
-
-
 @app.get("/api/metrics")
 def api_metrics(
     windowMinutes: int = Query(default=config.default_window_minutes),
@@ -177,8 +155,15 @@ def api_metrics(
     latest_ts = latest["ts"] if latest else None
     unchanged = maybe_unchanged(latest_ts, knownTs)
     if unchanged is not None:
-        return unchanged
-    return build_metrics_payload(monitor, stabilizer, window)
+        return {
+            **unchanged,
+            "now": {"display_verdict": tick_display_verdict(monitor, stabilizer)},
+        }
+    return metrics_cache.get(
+        window,
+        latest_ts,
+        lambda: build_metrics_payload(monitor, stabilizer, window),
+    )
 
 
 def create_server(host: str, port: int) -> uvicorn.Server:

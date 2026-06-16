@@ -131,35 +131,6 @@ window.DashboardCharts = (() => {
     bindChartResizeObservers();
   }
 
-  function mergeRecentIntoLineSamples(samples, recent) {
-    if (!recent.length) return samples || [];
-    if (!samples?.length) return recent;
-
-    let base = samples;
-    let lastChartMs = new Date(base[base.length - 1].ts).valueOf();
-    const recentLatestMs = new Date(recent[recent.length - 1].ts).valueOf();
-
-    if (lastChartMs > recentLatestMs) {
-      const trimIdx = base.findIndex((s) => new Date(s.ts).valueOf() > recentLatestMs);
-      if (trimIdx >= 0) base = base.slice(0, trimIdx);
-      if (!base.length) return recent;
-      lastChartMs = new Date(base[base.length - 1].ts).valueOf();
-    }
-
-    const newer = recent.filter((s) => new Date(s.ts).valueOf() > lastChartMs);
-    if (newer.length) return base.concat(newer);
-
-    const lastRecent = recent[recent.length - 1];
-    if (lastRecent && new Date(lastRecent.ts).valueOf() === lastChartMs) {
-      return base.slice(0, -1).concat([lastRecent]);
-    }
-
-    const tail = recent.filter((s) => new Date(s.ts).valueOf() >= lastChartMs);
-    if (tail.length) return base.slice(0, -1).concat(tail);
-
-    return base;
-  }
-
   function trimSamplesToWindow(samples, windowMinutes, endTs) {
     if (!windowMinutes || !samples?.length) return samples || [];
     const endMs = endTs
@@ -170,57 +141,57 @@ window.DashboardCharts = (() => {
   }
 
   function chartLineSamples(payload) {
-    const merged = mergeRecentIntoLineSamples(
-      payload.samples || [],
-      payload.recent_samples || [],
-    );
+    const samples = payload.samples || [];
     const windowMinutes = payload.window_minutes ?? null;
-    const endTs = payload.latest_ts
-      ?? merged.at(-1)?.ts
-      ?? payload.recent_samples?.at(-1)?.ts;
-    return trimSamplesToWindow(merged, windowMinutes, endTs);
+    const endTs = payload.latest_ts ?? samples.at(-1)?.ts;
+    return trimSamplesToWindow(samples, windowMinutes, endTs);
   }
 
-  function syncLineChartTimeScale(chart, lineSamples, windowMinutes) {
+  function syncLineChartTimeScale(chart, lineSamples, windowMinutes, endTs) {
     const x = chart?.options?.scales?.x;
     if (!x) return;
-    if (!lineSamples.length) {
+    if (!lineSamples.length && !endTs) {
       delete x.min;
       delete x.max;
       return;
     }
-    const endMs = new Date(lineSamples[lineSamples.length - 1].ts).valueOf();
+    const endMs = endTs
+      ? new Date(endTs).valueOf()
+      : new Date(lineSamples[lineSamples.length - 1].ts).valueOf();
     if (windowMinutes != null) {
       x.min = endMs - windowMinutes * 60 * 1000;
       x.max = endMs;
       return;
     }
-    x.min = new Date(lineSamples[0].ts).valueOf();
+    if (lineSamples.length) {
+      x.min = new Date(lineSamples[0].ts).valueOf();
+    }
     x.max = endMs;
   }
 
-  function updateTimeSeriesLineChart(chart, lineSamples, windowMinutes, yValue) {
+  function setLineChartData(chart, lineSamples, windowMinutes, endTs, yValue) {
     chart.data.datasets[0].data = lineSamples.map((s) => ({
       x: new Date(s.ts).valueOf(),
       y: yValue(s),
     }));
-    syncLineChartTimeScale(chart, lineSamples, windowMinutes);
-    chart.update("none");
+    syncLineChartTimeScale(chart, lineSamples, windowMinutes, endTs);
   }
 
   const EMPTY_DISTRIBUTION = { great: 0, good: 0, okay: 0, bad: 0, failed: 0 };
 
   function updateCharts(payload) {
     if (!window.Chart) return;
-    const lineSamples = chartLineSamples(payload);
     const windowMinutes = payload.window_minutes ?? null;
+    const lineSamples = chartLineSamples(payload);
+    const endTs = payload.latest_ts ?? lineSamples.at(-1)?.ts ?? null;
     const now = payload.now || {};
 
     if (charts.latency) {
-      updateTimeSeriesLineChart(
+      setLineChartData(
         charts.latency,
         lineSamples,
         windowMinutes,
+        endTs,
         (s) => (s.success ? s.latency_ms : null),
       );
       const baseline = now.baseline_ms;
@@ -229,20 +200,21 @@ window.DashboardCharts = (() => {
           { x: new Date(lineSamples[0].ts).valueOf(), y: baseline },
           { x: new Date(lineSamples[lineSamples.length - 1].ts).valueOf(), y: baseline },
         ];
-        charts.latency.update("none");
       } else {
         charts.latency.data.datasets[1].data = [];
-        charts.latency.update("none");
       }
+      charts.latency.update("none");
     }
 
     if (charts.jitter) {
-      updateTimeSeriesLineChart(
+      setLineChartData(
         charts.jitter,
         lineSamples,
         windowMinutes,
+        endTs,
         (s) => (s.success ? (s.jitter_ms ?? null) : null),
       );
+      charts.jitter.update("none");
     }
 
     if (charts.loss) {
@@ -304,7 +276,6 @@ window.DashboardCharts = (() => {
     resizeCharts,
     redrawCharts,
     layoutSettledRefresh,
-    mergeRecentIntoLineSamples,
     trimSamplesToWindow,
   };
 })();

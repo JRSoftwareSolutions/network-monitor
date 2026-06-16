@@ -180,8 +180,7 @@ function blocksForWindow(windowMinutes) {
   return buckets;
 }
 
-function metricsForWindow(windowMinutes) {
-  const end = "2026-01-01T12:05:00.000Z";
+function metricsForWindow(windowMinutes, end = "2026-01-01T12:05:00.000Z") {
   const recent = [
     sampleAt(end, 1, 22, 1.2),
     sampleAt(end, 0.5, 24, 1.5),
@@ -204,6 +203,7 @@ function metricsForWindow(windowMinutes) {
   return {
     ...base,
     window_minutes: windowMinutes,
+    latest_ts: end,
     samples,
     recent_samples: recent,
     sample_count_raw: samples.length,
@@ -239,35 +239,93 @@ function latencyChartRangeMs(page) {
   return lineChartRangeMs(page, "latency-chart");
 }
 
-async function stubWindowedMetrics(page) {
-  await page.route("**/api/metrics?**", async (route) => {
-    const url = new URL(route.request().url());
-    const windowMinutes = Number(url.searchParams.get("windowMinutes") || "15");
-    await route.fulfill({
-      contentType: "application/json",
-      json: metricsForWindow(windowMinutes),
-    });
-  });
-  await page.route("**/api/metrics/live**", async (route) => {
-    const live = JSON.parse(
-      fs.readFileSync(path.join(FIXTURES_DIR, "metrics-live.json"), "utf8"),
-    );
-    await route.fulfill({ contentType: "application/json", json: live });
-  });
+function defaultConfig(overrides = {}) {
+  return {
+    target: "1.1.1.1",
+    default_window_minutes: 15,
+    window_options: [15, 30],
+    ping_interval_seconds: 1,
+    max_log_age_minutes: 180,
+    connection_refresh_seconds: 120,
+    ...overrides,
+  };
+}
+
+function unchangedMetrics(latestTs, now = {}) {
+  return {
+    unchanged: true,
+    latest_ts: latestTs,
+    now: {
+      display_verdict: now.display_verdict || { level: "good", label: "Good to game" },
+    },
+  };
+}
+
+async function routeConfig(page, overrides = {}) {
   await page.route("**/api/config", async (route) => {
     await route.fulfill({
       contentType: "application/json",
-      json: {
-        target: "1.1.1.1",
-        default_window_minutes: 15,
-        window_options: [15, 30],
-        ping_interval_seconds: 1,
-        max_log_age_minutes: 180,
-        full_refresh_seconds: 60,
-        connection_refresh_seconds: 120,
-      },
+      json: defaultConfig(overrides),
     });
   });
+}
+
+async function fulfillMetricsRoute(route, payload) {
+  const url = new URL(route.request().url());
+  const knownTs = url.searchParams.get("knownTs");
+  if (knownTs && payload.latest_ts && Date.parse(knownTs) >= Date.parse(payload.latest_ts)) {
+    await route.fulfill({
+      contentType: "application/json",
+      json: unchangedMetrics(payload.latest_ts, payload.now || {}),
+    });
+    return;
+  }
+  await route.fulfill({ contentType: "application/json", json: payload });
+}
+
+function advanceSamples(samples, endMs, bump = 0) {
+  return samples.map((s, i) => ({
+    ...s,
+    ts: new Date(endMs - (samples.length - 1 - i) * 30 * 1000).toISOString(),
+    latency_ms: (s.latency_ms ?? 20) + bump,
+    jitter_ms: (s.jitter_ms ?? 1) + bump * 0.1,
+  }));
+}
+
+async function routeMetricsAdvanceOnPoll(page, baseEndMs = Date.parse("2026-01-01T12:05:00.000Z"), stepMs = 15 * 1000) {
+  let advanceStep = 0;
+  await page.route("**/api/metrics?**", async (route) => {
+    const url = new URL(route.request().url());
+    const windowMinutes = Number(url.searchParams.get("windowMinutes") || "15");
+    const knownTs = url.searchParams.get("knownTs");
+
+    if (!knownTs) {
+      await fulfillMetricsRoute(route, metricsForWindow(windowMinutes));
+      return;
+    }
+
+    advanceStep += 1;
+    const endMs = baseEndMs + advanceStep * stepMs;
+    const end = new Date(endMs).toISOString();
+    const payload = metricsForWindow(windowMinutes, end);
+    payload.samples = advanceSamples(payload.samples, endMs, advanceStep);
+    payload.recent_samples = advanceSamples(payload.recent_samples, endMs, advanceStep);
+    await route.fulfill({ contentType: "application/json", json: payload });
+  });
+}
+
+async function routeMetricsWindowed(page, configOverrides = {}) {
+  await routeConfig(page, configOverrides);
+  await page.route("**/api/metrics?**", async (route) => {
+    const url = new URL(route.request().url());
+    const defaultWindow = configOverrides.default_window_minutes ?? 15;
+    const windowMinutes = Number(url.searchParams.get("windowMinutes") || String(defaultWindow));
+    await fulfillMetricsRoute(route, metricsForWindow(windowMinutes));
+  });
+}
+
+async function stubWindowedMetrics(page) {
+  await routeMetricsWindowed(page, { default_window_minutes: 15, window_options: [15, 30] });
 }
 
 test("latency chart rescales when time window changes", async ({ page }) => {
@@ -295,45 +353,10 @@ test("jitter chart rescales when time window changes", async ({ page }) => {
 });
 
 test("jitter chart keeps updating after window change 5 to 15", async ({ page }) => {
-  let liveCall = 0;
   const baseEndMs = Date.parse("2026-01-01T12:05:00.000Z");
-
-  await page.route("**/api/config", async (route) => {
-    await route.fulfill({
-      contentType: "application/json",
-      json: {
-        target: "1.1.1.1",
-        default_window_minutes: 5,
-        window_options: [5, 15, 30],
-        ping_interval_seconds: 1,
-        max_log_age_minutes: 180,
-        full_refresh_seconds: 60,
-        connection_refresh_seconds: 120,
-      },
-    });
-  });
-  await page.route("**/api/metrics?**", async (route) => {
-    const url = new URL(route.request().url());
-    const windowMinutes = Number(url.searchParams.get("windowMinutes") || "5");
-    await route.fulfill({
-      contentType: "application/json",
-      json: metricsForWindow(windowMinutes),
-    });
-  });
-  await page.route("**/api/metrics/live**", async (route) => {
-    liveCall += 1;
-    const endMs = baseEndMs + liveCall * 15 * 1000;
-    const end = new Date(endMs).toISOString();
-    const base = JSON.parse(
-      fs.readFileSync(path.join(FIXTURES_DIR, "metrics-live.json"), "utf8"),
-    );
-    base.latest_ts = end;
-    base.recent_samples = base.recent_samples.map((s, i) => ({
-      ...s,
-      ts: new Date(endMs - (base.recent_samples.length - 1 - i) * 30 * 1000).toISOString(),
-      jitter_ms: (s.jitter_ms ?? 1) + liveCall,
-    }));
-    await route.fulfill({ contentType: "application/json", json: base });
+  await routeMetricsWindowed(page, {
+    default_window_minutes: 5,
+    window_options: [5, 15, 30],
   });
 
   await page.goto("/");
@@ -348,6 +371,8 @@ test("jitter chart keeps updating after window change 5 to 15", async ({ page })
   });
   expect(maxAfterChange).toBeGreaterThan(0);
 
+  await routeMetricsAdvanceOnPoll(page, baseEndMs);
+
   await expect.poll(async () => page.evaluate(() => {
     const canvas = document.getElementById("jitter-chart");
     const chart = canvas && window.Chart ? window.Chart.getChart(canvas) : null;
@@ -356,45 +381,10 @@ test("jitter chart keeps updating after window change 5 to 15", async ({ page })
 });
 
 test("jitter chart keeps updating after window change 15 to 5", async ({ page }) => {
-  let liveCall = 0;
   const baseEndMs = Date.parse("2026-01-01T12:05:00.000Z");
-
-  await page.route("**/api/config", async (route) => {
-    await route.fulfill({
-      contentType: "application/json",
-      json: {
-        target: "1.1.1.1",
-        default_window_minutes: 15,
-        window_options: [5, 15, 30],
-        ping_interval_seconds: 1,
-        max_log_age_minutes: 180,
-        full_refresh_seconds: 60,
-        connection_refresh_seconds: 120,
-      },
-    });
-  });
-  await page.route("**/api/metrics?**", async (route) => {
-    const url = new URL(route.request().url());
-    const windowMinutes = Number(url.searchParams.get("windowMinutes") || "15");
-    await route.fulfill({
-      contentType: "application/json",
-      json: metricsForWindow(windowMinutes),
-    });
-  });
-  await page.route("**/api/metrics/live**", async (route) => {
-    liveCall += 1;
-    const endMs = baseEndMs + liveCall * 15 * 1000;
-    const end = new Date(endMs).toISOString();
-    const base = JSON.parse(
-      fs.readFileSync(path.join(FIXTURES_DIR, "metrics-live.json"), "utf8"),
-    );
-    base.latest_ts = end;
-    base.recent_samples = base.recent_samples.map((s, i) => ({
-      ...s,
-      ts: new Date(endMs - (base.recent_samples.length - 1 - i) * 30 * 1000).toISOString(),
-      jitter_ms: (s.jitter_ms ?? 1) + liveCall,
-    }));
-    await route.fulfill({ contentType: "application/json", json: base });
+  await routeMetricsWindowed(page, {
+    default_window_minutes: 15,
+    window_options: [5, 15, 30],
   });
 
   await page.goto("/");
@@ -408,6 +398,8 @@ test("jitter chart keeps updating after window change 15 to 5", async ({ page })
     return chart?.scales?.x?.max ?? 0;
   });
   expect(maxAfterChange).toBeGreaterThan(0);
+
+  await routeMetricsAdvanceOnPoll(page, baseEndMs);
 
   await expect.poll(async () => page.evaluate(() => {
     const canvas = document.getElementById("jitter-chart");
@@ -564,29 +556,10 @@ test("panels popover toggles panel visibility in edit mode", async ({ page }) =>
   await expect(page.locator('[data-panel="hero"]')).toHaveClass(/is-panel-hidden/);
 });
 
-test("forced full refresh runs after aborting in-flight poll", async ({ page }) => {
+test("window reload runs after aborting in-flight poll", async ({ page }) => {
   let metricsCalls = 0;
   let slowNext = false;
-  await page.route("**/api/config", async (route) => {
-    await route.fulfill({
-      contentType: "application/json",
-      json: {
-        target: "1.1.1.1",
-        default_window_minutes: 15,
-        window_options: [15, 30],
-        ping_interval_seconds: 1,
-        max_log_age_minutes: 180,
-        full_refresh_seconds: 60,
-        connection_refresh_seconds: 120,
-      },
-    });
-  });
-  await page.route("**/api/metrics/live**", async (route) => {
-    const live = JSON.parse(
-      fs.readFileSync(path.join(FIXTURES_DIR, "metrics-live.json"), "utf8"),
-    );
-    await route.fulfill({ contentType: "application/json", json: live });
-  });
+  await routeConfig(page, { default_window_minutes: 15, window_options: [15, 30] });
   await page.route("**/api/metrics?**", async (route) => {
     metricsCalls += 1;
     if (slowNext) {
@@ -595,10 +568,7 @@ test("forced full refresh runs after aborting in-flight poll", async ({ page }) 
     }
     const url = new URL(route.request().url());
     const windowMinutes = Number(url.searchParams.get("windowMinutes") || "15");
-    await route.fulfill({
-      contentType: "application/json",
-      json: metricsForWindow(windowMinutes),
-    });
+    await fulfillMetricsRoute(route, metricsForWindow(windowMinutes));
   });
 
   await page.goto("/");
@@ -611,7 +581,7 @@ test("forced full refresh runs after aborting in-flight poll", async ({ page }) 
   await expect.poll(async () => latencyChartRangeMs(page)).toBeCloseTo(30 * 60 * 1000, -3);
 });
 
-test("unchanged live poll still updates staleness pill", async ({ page }) => {
+test("unchanged metrics poll still updates staleness pill", async ({ page }) => {
   await stubWindowedMetrics(page);
   await page.goto("/");
   await waitForLiveStatus(page);
@@ -620,21 +590,18 @@ test("unchanged live poll still updates staleness pill", async ({ page }) => {
     document.getElementById("updated-pill").textContent = "10s ago";
   });
 
-  await page.route("**/api/metrics/live**", async (route) => {
-    const live = JSON.parse(
-      fs.readFileSync(path.join(FIXTURES_DIR, "metrics-live.json"), "utf8"),
-    );
+  await page.route("**/api/metrics?**", async (route) => {
+    const payload = metricsForWindow(15);
     await route.fulfill({
       contentType: "application/json",
-      json: { unchanged: true, latest_ts: live.latest_ts, now: live.now },
+      json: unchangedMetrics(payload.latest_ts, payload.now || {}),
     });
   });
 
   await expect.poll(async () => page.locator("#updated-pill").textContent()).toMatch(/just now|1s ago|2s ago/);
 });
 
-test("live poll advances line charts between full refreshes", async ({ page }) => {
-  let liveCall = 0;
+test("metrics poll advances jitter chart", async ({ page }) => {
   await stubWindowedMetrics(page);
   await page.goto("/");
   await waitForLiveStatus(page);
@@ -646,21 +613,7 @@ test("live poll advances line charts between full refreshes", async ({ page }) =
   });
   expect(maxBefore).toBeGreaterThan(0);
 
-  await page.route("**/api/metrics/live**", async (route) => {
-    liveCall += 1;
-    const base = JSON.parse(
-      fs.readFileSync(path.join(FIXTURES_DIR, "metrics-live.json"), "utf8"),
-    );
-    const endMs = Date.parse("2026-01-01T12:05:00.000Z") + liveCall * 15 * 1000;
-    const end = new Date(endMs).toISOString();
-    base.latest_ts = end;
-    base.recent_samples = base.recent_samples.map((s, i) => ({
-      ...s,
-      ts: new Date(endMs - (base.recent_samples.length - 1 - i) * 30 * 1000).toISOString(),
-      jitter_ms: (s.jitter_ms ?? 1) + liveCall,
-    }));
-    await route.fulfill({ contentType: "application/json", json: base });
-  });
+  await routeMetricsAdvanceOnPoll(page);
 
   await expect.poll(async () => page.evaluate(() => {
     const canvas = document.getElementById("jitter-chart");
@@ -669,8 +622,7 @@ test("live poll advances line charts between full refreshes", async ({ page }) =
   }), { timeout: 8000 }).toBeGreaterThan(maxBefore);
 });
 
-test("live poll advances latency chart between full refreshes", async ({ page }) => {
-  let liveCall = 0;
+test("metrics poll advances latency chart", async ({ page }) => {
   await stubWindowedMetrics(page);
   await page.goto("/");
   await waitForLiveStatus(page);
@@ -682,21 +634,7 @@ test("live poll advances latency chart between full refreshes", async ({ page })
   });
   expect(maxBefore).toBeGreaterThan(0);
 
-  await page.route("**/api/metrics/live**", async (route) => {
-    liveCall += 1;
-    const base = JSON.parse(
-      fs.readFileSync(path.join(FIXTURES_DIR, "metrics-live.json"), "utf8"),
-    );
-    const endMs = Date.parse("2026-01-01T12:05:00.000Z") + liveCall * 15 * 1000;
-    const end = new Date(endMs).toISOString();
-    base.latest_ts = end;
-    base.recent_samples = base.recent_samples.map((s, i) => ({
-      ...s,
-      ts: new Date(endMs - (base.recent_samples.length - 1 - i) * 30 * 1000).toISOString(),
-      latency_ms: (s.latency_ms ?? 20) + liveCall,
-    }));
-    await route.fulfill({ contentType: "application/json", json: base });
-  });
+  await routeMetricsAdvanceOnPoll(page);
 
   await expect.poll(async () => page.evaluate(() => {
     const canvas = document.getElementById("latency-chart");
@@ -706,45 +644,10 @@ test("live poll advances latency chart between full refreshes", async ({ page })
 });
 
 test("latency chart keeps updating after window change 5 to 15", async ({ page }) => {
-  let liveCall = 0;
   const baseEndMs = Date.parse("2026-01-01T12:05:00.000Z");
-
-  await page.route("**/api/config", async (route) => {
-    await route.fulfill({
-      contentType: "application/json",
-      json: {
-        target: "1.1.1.1",
-        default_window_minutes: 5,
-        window_options: [5, 15, 30],
-        ping_interval_seconds: 1,
-        max_log_age_minutes: 180,
-        full_refresh_seconds: 60,
-        connection_refresh_seconds: 120,
-      },
-    });
-  });
-  await page.route("**/api/metrics?**", async (route) => {
-    const url = new URL(route.request().url());
-    const windowMinutes = Number(url.searchParams.get("windowMinutes") || "5");
-    await route.fulfill({
-      contentType: "application/json",
-      json: metricsForWindow(windowMinutes),
-    });
-  });
-  await page.route("**/api/metrics/live**", async (route) => {
-    liveCall += 1;
-    const endMs = baseEndMs + liveCall * 15 * 1000;
-    const end = new Date(endMs).toISOString();
-    const base = JSON.parse(
-      fs.readFileSync(path.join(FIXTURES_DIR, "metrics-live.json"), "utf8"),
-    );
-    base.latest_ts = end;
-    base.recent_samples = base.recent_samples.map((s, i) => ({
-      ...s,
-      ts: new Date(endMs - (base.recent_samples.length - 1 - i) * 30 * 1000).toISOString(),
-      latency_ms: (s.latency_ms ?? 20) + liveCall,
-    }));
-    await route.fulfill({ contentType: "application/json", json: base });
+  await routeMetricsWindowed(page, {
+    default_window_minutes: 5,
+    window_options: [5, 15, 30],
   });
 
   await page.goto("/");
@@ -759,6 +662,8 @@ test("latency chart keeps updating after window change 5 to 15", async ({ page }
   });
   expect(maxAfterChange).toBeGreaterThan(0);
 
+  await routeMetricsAdvanceOnPoll(page, baseEndMs);
+
   await expect.poll(async () => page.evaluate(() => {
     const canvas = document.getElementById("latency-chart");
     const chart = canvas && window.Chart ? window.Chart.getChart(canvas) : null;
@@ -766,36 +671,33 @@ test("latency chart keeps updating after window change 5 to 15", async ({ page }
   }), { timeout: 8000 }).toBeGreaterThan(maxAfterChange);
 });
 
-test("poll recovery catches up after stalled live responses", async ({ page }) => {
-  let liveCalls = 0;
-  let failLive = false;
-  await stubWindowedMetrics(page);
-
-  await page.route("**/api/metrics/live**", async (route) => {
-    liveCalls += 1;
-    if (failLive) {
+test("poll recovery catches up after stalled metrics responses", async ({ page }) => {
+  let metricsCalls = 0;
+  let failMetrics = false;
+  await routeConfig(page, { default_window_minutes: 15, window_options: [15, 30] });
+  await page.route("**/api/metrics?**", async (route) => {
+    metricsCalls += 1;
+    if (failMetrics) {
       await route.abort();
       return;
     }
-    const live = JSON.parse(
-      fs.readFileSync(path.join(FIXTURES_DIR, "metrics-live.json"), "utf8"),
-    );
-    await route.fulfill({ contentType: "application/json", json: live });
+    const url = new URL(route.request().url());
+    const windowMinutes = Number(url.searchParams.get("windowMinutes") || "15");
+    await fulfillMetricsRoute(route, metricsForWindow(windowMinutes));
   });
 
   await page.goto("/");
   await waitForLiveStatus(page);
-  const callsBeforeStall = liveCalls;
+  const callsBeforeStall = metricsCalls;
 
-  failLive = true;
+  failMetrics = true;
   await page.waitForTimeout(4500);
-  failLive = false;
+  failMetrics = false;
 
-  await expect.poll(() => liveCalls, { timeout: 10000 }).toBeGreaterThan(callsBeforeStall + 1);
+  await expect.poll(() => metricsCalls, { timeout: 10000 }).toBeGreaterThan(callsBeforeStall + 1);
 });
 
-test("charts keep rolling after stalled live polls", async ({ page }) => {
-  let liveCall = 0;
+test("charts keep rolling after stalled metrics polls", async ({ page }) => {
   const baseEndMs = Date.parse("2026-01-01T12:05:00.000Z");
   await stubWindowedMetrics(page);
   await page.goto("/");
@@ -808,30 +710,15 @@ test("charts keep rolling after stalled live polls", async ({ page }) => {
   });
   expect(latencyMaxBefore).toBeGreaterThan(0);
 
-  await page.route("**/api/metrics/live**", async (route) => {
+  await page.route("**/api/metrics?**", async (route) => {
     await route.fulfill({
       contentType: "application/json",
-      json: { unchanged: true, latest_ts: new Date(baseEndMs).toISOString(), now: {} },
+      json: unchangedMetrics(new Date(baseEndMs).toISOString()),
     });
   });
   await page.waitForTimeout(3500);
 
-  await page.route("**/api/metrics/live**", async (route) => {
-    liveCall += 1;
-    const endMs = baseEndMs + liveCall * 15 * 1000;
-    const end = new Date(endMs).toISOString();
-    const base = JSON.parse(
-      fs.readFileSync(path.join(FIXTURES_DIR, "metrics-live.json"), "utf8"),
-    );
-    base.latest_ts = end;
-    base.recent_samples = base.recent_samples.map((s, i) => ({
-      ...s,
-      ts: new Date(endMs - (base.recent_samples.length - 1 - i) * 30 * 1000).toISOString(),
-      latency_ms: (s.latency_ms ?? 20) + liveCall,
-      jitter_ms: (s.jitter_ms ?? 1) + liveCall * 0.1,
-    }));
-    await route.fulfill({ contentType: "application/json", json: base });
-  });
+  await routeMetricsAdvanceOnPoll(page, baseEndMs);
 
   await expect.poll(async () => page.evaluate(() => {
     const canvas = document.getElementById("latency-chart");
@@ -841,7 +728,6 @@ test("charts keep rolling after stalled live polls", async ({ page }) => {
 });
 
 test("charts keep rolling after tab becomes visible", async ({ page }) => {
-  let liveCall = 0;
   const baseEndMs = Date.parse("2026-01-01T12:05:00.000Z");
   await stubWindowedMetrics(page);
   await page.goto("/");
@@ -860,10 +746,10 @@ test("charts keep rolling after tab becomes visible", async ({ page }) => {
   expect(latencyMaxBefore).toBeGreaterThan(0);
   expect(jitterMaxBefore).toBeGreaterThan(0);
 
-  await page.route("**/api/metrics/live**", async (route) => {
+  await page.route("**/api/metrics?**", async (route) => {
     await route.fulfill({
       contentType: "application/json",
-      json: { unchanged: true, latest_ts: new Date(baseEndMs).toISOString(), now: {} },
+      json: unchangedMetrics(new Date(baseEndMs).toISOString()),
     });
   });
   await page.evaluate(() => {
@@ -873,22 +759,7 @@ test("charts keep rolling after tab becomes visible", async ({ page }) => {
   });
   await page.waitForTimeout(3100);
 
-  await page.route("**/api/metrics/live**", async (route) => {
-    liveCall += 1;
-    const endMs = baseEndMs + liveCall * 15 * 1000;
-    const end = new Date(endMs).toISOString();
-    const base = JSON.parse(
-      fs.readFileSync(path.join(FIXTURES_DIR, "metrics-live.json"), "utf8"),
-    );
-    base.latest_ts = end;
-    base.recent_samples = base.recent_samples.map((s, i) => ({
-      ...s,
-      ts: new Date(endMs - (base.recent_samples.length - 1 - i) * 30 * 1000).toISOString(),
-      latency_ms: (s.latency_ms ?? 20) + liveCall,
-      jitter_ms: (s.jitter_ms ?? 1) + liveCall * 0.1,
-    }));
-    await route.fulfill({ contentType: "application/json", json: base });
-  });
+  await routeMetricsAdvanceOnPoll(page, baseEndMs);
   await page.evaluate(() => {
     Object.defineProperty(document, "hidden", { value: false, configurable: true });
     document.dispatchEvent(new Event("visibilitychange"));
@@ -907,53 +778,50 @@ test("charts keep rolling after tab becomes visible", async ({ page }) => {
   }), { timeout: 8000 }).toBeGreaterThan(jitterMaxBefore);
 });
 
+test("window changes apply after alt-tab return", async ({ page }) => {
+  await routeMetricsWindowed(page, {
+    default_window_minutes: 15,
+    window_options: [5, 15, 120],
+  });
+
+  await page.goto("/");
+  await waitForLiveStatus(page);
+
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { value: true, configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("blur"));
+  });
+  await page.waitForTimeout(3100);
+  await page.evaluate(() => {
+    Object.defineProperty(document, "hidden", { value: false, configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    window.dispatchEvent(new Event("focus"));
+  });
+  await page.waitForTimeout(200);
+
+  for (const minutes of [5, 15, 120]) {
+    await page.selectOption("#window-select", String(minutes));
+    await expect.poll(async () => latencyChartRangeMs(page)).toBeCloseTo(minutes * 60 * 1000, -3);
+    await expect.poll(async () => page.locator("#window-label").textContent()).toBe(String(minutes));
+  }
+});
+
 test("settings save triggers full metrics fetch", async ({ page }) => {
   let metricsCalls = 0;
-  let liveCall = 0;
   const baseEndMs = Date.parse("2026-01-01T12:05:00.000Z");
   await page.route("**/api/config", async (route) => {
     if (route.request().method() === "POST") {
       await route.fulfill({
         contentType: "application/json",
-        json: {
-          target: "8.8.8.8",
-          default_window_minutes: 15,
-          window_options: [15, 30],
-          ping_interval_seconds: 1,
-          max_log_age_minutes: 180,
-          full_refresh_seconds: 60,
-          connection_refresh_seconds: 120,
-        },
+        json: defaultConfig({ target: "8.8.8.8" }),
       });
       return;
     }
     await route.fulfill({
       contentType: "application/json",
-      json: {
-        target: "1.1.1.1",
-        default_window_minutes: 15,
-        window_options: [15, 30],
-        ping_interval_seconds: 1,
-        max_log_age_minutes: 180,
-        full_refresh_seconds: 60,
-        connection_refresh_seconds: 120,
-      },
+      json: defaultConfig(),
     });
-  });
-  await page.route("**/api/metrics/live**", async (route) => {
-    liveCall += 1;
-    const endMs = baseEndMs + liveCall * 15 * 1000;
-    const end = new Date(endMs).toISOString();
-    const base = JSON.parse(
-      fs.readFileSync(path.join(FIXTURES_DIR, "metrics-live.json"), "utf8"),
-    );
-    base.latest_ts = end;
-    base.recent_samples = base.recent_samples.map((s, i) => ({
-      ...s,
-      ts: new Date(endMs - (base.recent_samples.length - 1 - i) * 30 * 1000).toISOString(),
-      latency_ms: (s.latency_ms ?? 20) + liveCall,
-    }));
-    await route.fulfill({ contentType: "application/json", json: base });
   });
   await page.route("**/api/metrics?**", async (route) => {
     metricsCalls += 1;
@@ -991,15 +859,9 @@ test.describe("visual regression", () => {
     const metricsFull = JSON.parse(
       fs.readFileSync(path.join(FIXTURES_DIR, "metrics-full.json"), "utf8"),
     );
-    const metricsLive = JSON.parse(
-      fs.readFileSync(path.join(FIXTURES_DIR, "metrics-live.json"), "utf8"),
-    );
 
-    await page.route("**/api/metrics/live**", async (route) => {
-      await route.fulfill({ contentType: "application/json", json: metricsLive });
-    });
     await page.route("**/api/metrics?**", async (route) => {
-      await route.fulfill({ contentType: "application/json", json: metricsFull });
+      await fulfillMetricsRoute(route, metricsFull);
     });
   });
 

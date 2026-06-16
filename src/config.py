@@ -29,7 +29,6 @@ MAX_SERVER_PORT = 65535
 MIN_DEFAULT_WINDOW_MINUTES = 1
 MAX_DEFAULT_WINDOW_MINUTES = 1440
 
-DEFAULT_FULL_REFRESH_SECONDS = 60.0
 DEFAULT_CONNECTION_REFRESH_SECONDS = 120.0
 DEFAULT_TARGET = "1.1.1.1"
 DEFAULT_LOG_FILE = "logs/metrics.jsonl"
@@ -92,7 +91,6 @@ class Config:
     archive_enabled: bool
     max_log_size_bytes: int
     archive_dir: Path
-    full_refresh_seconds: float = DEFAULT_FULL_REFRESH_SECONDS
     connection_refresh_seconds: float = DEFAULT_CONNECTION_REFRESH_SECONDS
 
 
@@ -233,9 +231,6 @@ def _parse_config_fields(raw: dict, errors: list[str]) -> Config:
         archive_enabled=bool(raw.get("archive_enabled", True)),
         max_log_size_bytes=max_log_size_bytes,
         archive_dir=archive_dir,
-        full_refresh_seconds=clamp_refresh_seconds(
-            raw.get("full_refresh_seconds", DEFAULT_FULL_REFRESH_SECONDS)
-        ),
         connection_refresh_seconds=clamp_refresh_seconds(
             raw.get("connection_refresh_seconds", DEFAULT_CONNECTION_REFRESH_SECONDS)
         ),
@@ -278,7 +273,6 @@ def save_config(config: Config, path: Path | None = None) -> None:
         "archive_enabled": config.archive_enabled,
         "max_log_size_mb": _yaml_number(config.max_log_size_bytes / (1024 * 1024)),
         "archive_dir": _yaml_path(config.archive_dir),
-        "full_refresh_seconds": _yaml_number(config.full_refresh_seconds),
         "connection_refresh_seconds": _yaml_number(config.connection_refresh_seconds),
     }
     with config_path.open("w", encoding="utf-8") as handle:

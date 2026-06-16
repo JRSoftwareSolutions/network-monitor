@@ -58,7 +58,6 @@ Edit [`config.yaml`](config.yaml):
 | `archive_enabled` | Write removed entries to timestamped archive files | `true` |
 | `max_log_size_mb` | Max live log file size before oldest entries are archived | `1` |
 | `archive_dir` | Directory for archived JSONL files | `logs/archive` |
-| `full_refresh_seconds` | Minimum seconds between full `/api/metrics` reloads | `60` |
 | `connection_refresh_seconds` | How often the dashboard refreshes connection info | `120` |
 
 Rolling window options in the dashboard are limited to values ≤ `max_log_age_minutes` (5, 15, 30, 60, 120 minutes by default).
@@ -103,7 +102,7 @@ Top to bottom:
 Plus:
 
 - Live tab title (`28 ms · Good to game`) and a favicon dot that recolors with the verdict, so the tab works as a background monitor
-- Poll interval matches `ping_interval_seconds` from config; lightweight `/api/metrics/live` checks use `knownTs` so full metrics load only when a new sample is available
+- Poll interval matches `ping_interval_seconds` from config; `/api/metrics` uses `knownTs` so unchanged polls return only a verdict tick until a new ping arrives
 - Connection info refreshes every 2 minutes (cached server-side for 5 minutes)
 - Rolling window options derived from `max_log_age_minutes`; selection saved in browser `localStorage`
 - "Updated Xs ago" staleness indicator
@@ -127,8 +126,7 @@ Computed server-side over the last 120 seconds; the instant verdict is the worst
 |----------|-------------|
 | `GET /api/config` | Monitor configuration for the UI (includes `window_options`) |
 | `GET /api/connection` | Active network connection (WiFi/Ethernet + name) |
-| `GET /api/metrics/live?knownTs=…` | Lightweight poll: recent samples + `now` verdict when timestamp changed |
-| `GET /api/metrics?windowMinutes=30` | Filtered samples, stats, health, outages, and blocks |
+| `GET /api/metrics?windowMinutes=30&knownTs=…` | Full metrics when data changed; `{ unchanged: true }` + verdict tick otherwise |
 
 `/api/metrics` response includes:
 

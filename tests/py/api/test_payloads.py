@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta, timezone
 
 from src.api.payloads import (
-    build_live_payload,
     build_metrics_payload,
     build_now_payload,
     tick_display_verdict,
@@ -41,11 +40,11 @@ def test_build_now_payload_shape():
     assert "narrative" in payload
 
 
-def test_build_live_payload_includes_indicator_series():
+def test_build_metrics_payload_includes_indicator_series():
     now = datetime(2026, 6, 14, 12, 0, 0, tzinfo=timezone.utc)
     samples = [sample(now, -i, latency_ms=20 + (i % 5)) for i in range(20)]
     monitor = FakeMonitor(samples)
-    payload = build_live_payload(monitor, VerdictStabilizer())
+    payload = build_metrics_payload(monitor, VerdictStabilizer(), window=15)
     assert "indicator_series" in payload
     assert set(payload["indicator_series"]) == {"ping", "jitter", "loss", "spikes"}
     assert len(payload["indicator_series"]["ping"]) == len(monitor.get_recent_samples(120))

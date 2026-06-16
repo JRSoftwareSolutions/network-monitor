@@ -19,41 +19,23 @@ function loadDashboardCharts() {
   return sandbox.DashboardCharts;
 }
 
-test("mergeRecentIntoLineSamples appends newer live tail", () => {
+test("chartLineSamples uses server samples without client merge", () => {
   const DC = loadDashboardCharts();
   const samples = [
     { ts: "2026-01-01T12:00:00.000Z", latency_ms: 20 },
     { ts: "2026-01-01T12:04:00.000Z", latency_ms: 22 },
-  ];
-  const recent = [
-    { ts: "2026-01-01T12:04:30.000Z", latency_ms: 24 },
-    { ts: "2026-01-01T12:05:00.000Z", latency_ms: 21 },
-  ];
-  const merged = DC.mergeRecentIntoLineSamples(samples, recent);
-  assert.equal(merged.length, 4);
-  assert.equal(merged[merged.length - 1].ts, "2026-01-01T12:05:00.000Z");
-});
-
-test("chart tail is older than server latest_ts so knownTs stays behind server", () => {
-  const DC = loadDashboardCharts();
-  const samples = [
-    { ts: "2026-01-01T12:00:00.000Z", latency_ms: 20 },
-    { ts: "2026-01-01T12:04:00.000Z", latency_ms: 22 },
-  ];
-  const recent = [
-    { ts: "2026-01-01T12:04:30.000Z", latency_ms: 24 },
     { ts: "2026-01-01T12:05:00.000Z", latency_ms: 21 },
   ];
   const payload = {
     window_minutes: 30,
-    latest_ts: "2026-01-01T12:05:30.000Z",
+    latest_ts: "2026-01-01T12:05:00.000Z",
     samples,
-    recent_samples: recent,
+    recent_samples: [{ ts: "2026-01-01T12:05:30.000Z", latency_ms: 99 }],
   };
-  const chartTail = DC.chartLineSamples(payload).at(-1).ts;
-  const serverLatest = payload.latest_ts;
-  assert.ok(new Date(chartTail).valueOf() < new Date(serverLatest).valueOf());
-  assert.notEqual(chartTail, serverLatest);
+  const line = DC.chartLineSamples(payload);
+  assert.equal(line.length, 3);
+  assert.equal(line[line.length - 1].ts, "2026-01-01T12:05:00.000Z");
+  assert.equal(line[line.length - 1].latency_ms, 21);
 });
 
 test("trimSamplesToWindow drops points outside selected window", () => {
