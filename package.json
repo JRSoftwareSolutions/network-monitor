@@ -1,10 +1,14 @@
 {
   "private": true,
   "scripts": {
-    "test:py": "python -m pytest tests/py -q",
-    "test:unit": "node --test tests/js/*.test.mjs",
+    "web:install": "cd web && npm install",
+    "web:build": "cd web && npm run build",
+    "sync-web": "powershell -NoProfile -Command \"if (Test-Path internal/api/dist) { Remove-Item -Recurse -Force internal/api/dist }; New-Item -ItemType Directory -Force internal/api/dist | Out-Null; Copy-Item -Recurse web/dist/* internal/api/dist/\"",
+    "build": "npm run web:build && npm run sync-web && go build -o bin/monitor.exe ./cmd/monitor",
+    "test:go": "go test ./...",
+    "test:unit": "cd web && npm run test",
     "test:e2e": "playwright test",
-    "test": "npm run test:unit && npm run test:py && npm run test:e2e"
+    "test": "npm run test:go && npm run test:unit && npm run test:e2e"
   },
   "devDependencies": {
     "@playwright/test": "1.49.0"

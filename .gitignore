@@ -1,6 +1,9 @@
 node_modules/
+web/node_modules/
 test-results/
 logs/
+data/
+bin/
 screenshots/
 __pycache__/
 .pytest_cache/
@@ -10,3 +13,4 @@ venv/
 .env
 build/
 dist/
+NetworkMonitor/
