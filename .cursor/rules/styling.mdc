@@ -40,12 +40,12 @@ Three modes driven by **container queries on `.page`** (see `web/src/styles/laye
 |------|-----------|-----------|
 | **Vertical** | Container width ≤ `--breakpoint-md` | Single column stack |
 | **Normal** | Default | Connection \| Live, chart full width below |
-| **Ultrawide** | Container ≥ `--breakpoint-ultrawide-min` and aspect ≥ 2.1:1 | Sidebar: cards left, chart right |
+| **Ultrawide** | Container width ≥ `--breakpoint-ultrawide-min` (normal page max + sidebar + gap) | Sidebar: cards left, chart right |
 
 Rules for new UI:
 
 - Do **not** add component-level `@media` for dashboard layout; override `--layout-*` tokens in `layout.css` instead.
 - Consume `var(--layout-*)` for grids, gaps, and column counts (`--layout-metrics-columns`, `--layout-stat-columns`, etc.).
 - New dashboard panels need a named `grid-area` in `--layout-dashboard-areas` and `grid-area` on the component root.
-- Threshold tokens live in `primitives.css` (`--breakpoint-md`, `--breakpoint-ultrawide-min`); use them in `@container page` rules.
-- `@media` queries cannot use `var()` for breakpoints — use the matching literal value in `layout.css` (e.g. `56rem` for ultrawide) and keep the token in `primitives.css` as the source of truth.
+- Threshold tokens live in `primitives.css` (`--breakpoint-md`, `--breakpoint-ultrawide-min`); use them in `@container page` rules where supported (`max-width` accepts `var()`).
+- `min-width` container queries and `@media` cannot use `var()` in Chromium — use the matching literal value in `layout.css` (e.g. `1468px` for ultrawide) and keep the token in `primitives.css` as the source of truth.

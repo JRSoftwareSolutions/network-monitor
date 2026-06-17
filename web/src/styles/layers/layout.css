@@ -1,6 +1,9 @@
-.page {
+.page-shell {
   container-type: inline-size;
   container-name: page;
+}
+
+.page {
   max-width: var(--page-max-width);
   margin: 0 auto;
   padding: var(--layout-page-padding);
@@ -65,11 +68,12 @@
   }
 }
 
-@media (min-aspect-ratio: 2.1 / 1) and (min-width: 56rem) {
+/* 1468px = --page-max-width + --layout-ultrawide-sidebar + --layout-gap; must match --breakpoint-ultrawide-min */
+@container page (min-width: 1468px) {
   .page {
     --page-max-width: min(100%, 90rem);
     --chart-height: 380px;
-    --layout-dashboard-columns: 22rem minmax(0, 1fr);
+    --layout-dashboard-columns: var(--layout-ultrawide-sidebar) minmax(0, 1fr);
     --layout-dashboard-areas:
       "connection chart"
       "live chart";

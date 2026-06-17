@@ -90,7 +90,7 @@ test.describe("layout modes", () => {
   });
 
   test("normal: connection and live side by side", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize({ width: 880, height: 800 });
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Network Monitor" })).toBeVisible();
 
@@ -115,19 +115,46 @@ test.describe("layout modes", () => {
     expect(chartBox!.height).toBeGreaterThan(connBox!.height);
   });
 
+  test("ultrawide: layout stable when window height changes", async ({ page }) => {
+    for (const height of [700, 1200]) {
+      await page.setViewportSize({ width: 1600, height });
+      await page.goto("/");
+      await expect(page.getByRole("heading", { name: "Network Monitor" })).toBeVisible();
+
+      const connBox = await connection(page).boundingBox();
+      const chartBox = await chart(page).boundingBox();
+      expect(connBox).not.toBeNull();
+      expect(chartBox).not.toBeNull();
+      expect(chartBox!.x).toBeGreaterThan(connBox!.x);
+    }
+  });
+
+  test("normal: chart full width below cards at typical desktop width", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Network Monitor" })).toBeVisible();
+
+    const connBox = await connection(page).boundingBox();
+    const chartBox = await chart(page).boundingBox();
+    expect(connBox).not.toBeNull();
+    expect(chartBox).not.toBeNull();
+    expect(chartBox!.y).toBeGreaterThan(connBox!.y);
+    expect(Math.abs(chartBox!.x - connBox!.x)).toBeLessThan(40);
+  });
+
   test("vertical: live metric detail stats visible", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
     const liveCard = live(page);
-    await expect(liveCard.getByText("Min", { exact: true })).toBeVisible();
+    await expect(liveCard.locator(".metric-detail").first()).toBeVisible();
     await expect(liveCard.getByText("Lost", { exact: true })).toBeVisible();
   });
 
   test("normal: live metric detail stats hidden", async ({ page }) => {
-    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.setViewportSize({ width: 880, height: 800 });
     await page.goto("/");
     const liveCard = live(page);
-    await expect(liveCard.getByText("Min", { exact: true })).toBeHidden();
+    await expect(liveCard.locator(".metric-detail").first()).toBeHidden();
     await expect(liveCard.getByText("Lost", { exact: true })).toBeHidden();
   });
 });

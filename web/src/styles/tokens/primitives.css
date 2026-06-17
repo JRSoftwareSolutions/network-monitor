@@ -40,8 +40,9 @@
 
   /* layout thresholds */
   --breakpoint-md: 800px;
-  --breakpoint-ultrawide-min: 56rem;
-  --aspect-ultrawide-min: 2.1;
+  /* page-max-width + layout-ultrawide-sidebar + layout-gap — chart would start shrinking below this */
+  --layout-ultrawide-sidebar: 22rem;
+  --breakpoint-ultrawide-min: 1468px;
 
   /* layout tokens (normal mode defaults) */
   --page-max-width: 1100px;

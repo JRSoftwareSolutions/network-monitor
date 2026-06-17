@@ -96,6 +96,7 @@
   const pingIntervalMs = $derived((config?.ping_interval_seconds ?? 1) * 1000);
 </script>
 
+<div class="page-shell">
 <div class="page">
   <header class="topbar">
     <div>
@@ -126,6 +127,7 @@
     <LiveMetricsCard />
     <ChartPanel {windowMinutes} />
   </main>
+</div>
 </div>
 
 <SettingsPanel
