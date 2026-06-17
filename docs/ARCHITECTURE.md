@@ -118,7 +118,7 @@ CSS lives under `web/src/styles/`:
 - `layers/` — reset, base typography, **layout modes** (`layout.css`), shared component rules
 - `index.css` — `@layer` declaration and ordered imports (entry from `main.ts`)
 
-Layout modes (vertical / normal / ultrawide) are centralized in `layers/layout.css` via container queries on `.page`. Components consume `--layout-*` tokens rather than defining their own breakpoints. See `.cursor/rules/styling.mdc`.
+Layout modes (vertical / normal / ultrawide) are centralized in `layers/layout.css` via container queries on `.page-shell`. Components consume `--layout-*` tokens rather than defining their own breakpoints. The dashboard uses a **6-track fractional grid** — panels declare column/row spans per mode; cards fill their grid cells. See `.cursor/rules/styling.mdc`.
 
 Component layout stays in scoped `<style>` blocks; promote to `layers/components.css` only when reused.
 

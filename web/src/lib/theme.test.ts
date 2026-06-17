@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { chartTheme, cssVar } from "./theme";
+import { chartMinHeight, chartTheme, cssVar } from "./theme";
 
 describe("theme", () => {
   const rootVars = new Map<string, string>();
@@ -48,19 +48,24 @@ describe("theme", () => {
 
   it("reads CSS custom properties from a passed element", () => {
     const el = {} as Element;
-    getStore(el).set("--chart-height", "380px");
-    expect(cssVar("--chart-height", el)).toBe("380px");
+    getStore(el).set("--layout-chart-min-height", "20rem");
+    expect(cssVar("--layout-chart-min-height", el)).toBe("20rem");
   });
 
-  it("parses chart height from CSS", () => {
-    document.documentElement.style.setProperty("--chart-height", "260px");
-    expect(chartTheme().height).toBe(260);
+  it("parses chart min height from rem tokens", () => {
+    document.documentElement.style.setProperty("--layout-chart-min-height", "16rem");
+    expect(chartMinHeight()).toBe(256);
   });
 
-  it("reads chart height from a passed element", () => {
-    const el = {} as Element;
-    getStore(el).set("--chart-height", "380px");
-    expect(chartTheme(el).height).toBe(380);
+  it("reads chart height from container clientHeight when available", () => {
+    const el = { clientHeight: 320 } as HTMLElement;
+    expect(chartTheme(el).height).toBe(320);
+  });
+
+  it("falls back to chart min height when container has no height", () => {
+    const el = { clientHeight: 0 } as HTMLElement;
+    getStore(el).set("--layout-chart-min-height", "20rem");
+    expect(chartTheme(el).height).toBe(320);
   });
 
   it("builds chart theme from tokens", () => {
@@ -71,13 +76,13 @@ describe("theme", () => {
       "--color-chart-envelope-fill",
       "rgba(56, 189, 248, 0.12)",
     );
-    document.documentElement.style.setProperty("--chart-height", "260px");
+    document.documentElement.style.setProperty("--layout-chart-min-height", "16rem");
     expect(chartTheme()).toEqual({
       seriesStroke: "#38bdf8",
       axisStroke: "#94a3b8",
       envelopeStroke: "#64748b",
       envelopeFill: "rgba(56, 189, 248, 0.12)",
-      height: 260,
+      height: 256,
     });
   });
 });

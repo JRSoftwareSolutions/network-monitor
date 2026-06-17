@@ -28,7 +28,7 @@
   const lost = $derived(lostPackets(sampleCount, successCount));
 </script>
 
-<section class="card live-card">
+<section class="card live-card dashboard-panel">
   <h2>{title}</h2>
   <div class="metrics-grid layout-metrics-grid">
     <div class="metric-tile">
@@ -80,14 +80,14 @@
 
 <style>
   .live-card {
-    grid-area: live;
     min-width: 0;
-    contain: layout style;
   }
 
   .metrics-grid {
     display: grid;
     gap: var(--space-3);
+    flex: 1;
+    min-height: 0;
   }
 
   .metric-tile {

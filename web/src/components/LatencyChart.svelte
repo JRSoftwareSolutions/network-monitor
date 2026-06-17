@@ -52,7 +52,7 @@
     const ro = new ResizeObserver(() => {
       if (!chart || !container) return;
       const width = container.clientWidth;
-      const height = chartTheme(container).height;
+      const height = container.clientHeight || chartTheme(container).height;
       if (width === lastWidth && height === lastHeight) return;
       lastWidth = width;
       lastHeight = height;
@@ -105,6 +105,8 @@
 <style>
   .chart-wrap {
     contain: strict;
-    height: var(--chart-height);
+    flex: 1;
+    min-height: var(--layout-chart-min-height);
+    height: 100%;
   }
 </style>
