@@ -1,0 +1,82 @@
+---
+description: Data visualization — chart bucketing, uPlot standards, scalar formatting
+globs: web/src/**,internal/metrics/**,internal/store/**,internal/api/handlers.go
+---
+
+# Data visualization
+
+Full reference: [docs/DATA_VISUALIZATION.md](../../docs/DATA_VISUALIZATION.md)
+
+## Fidelity split
+
+| Layer | Data |
+|-------|------|
+| SQLite | Every raw ping |
+| `/api/summary`, `/api/live` | All samples in scope |
+| `/api/samples`, charts | Time-bucketed for display only |
+
+## Chart bucketing (mandatory)
+
+```
+bucketSeconds = (windowMinutes × 60) / 300
+binStart      = floor(ts / bucketSeconds) × bucketSeconds
+```
+
+- **300-point baseline** — ~300 buckets at every window size (5 min → 1 s bins).
+- **Epoch-aligned bins** — never index bins relative to sliding `windowStart`.
+- Go: `DisplayBucketSeconds` + `AggregateBuckets`.
+- TS: `displayBucketSeconds` in `windows.ts`; `ingestSample` on SSE; chart refresh only on bin finalize or full fetch.
+- Per bucket: `ts` (absolute center), `avg_ms`, `min_ms`, `max_ms`, `sample_count`.
+- Failed pings: exclude from stats; all-fail bucket → null latencies.
+- **Latency chart default:** avg line + per-bucket min/max range band (not connected envelope lines).
+
+## File placement
+
+| Work | Location |
+|------|----------|
+| Tier lookup + aggregation | `internal/metrics/buckets.go` |
+| TS tier lookup | `web/src/lib/windows.ts` |
+| API response | `internal/api/handlers.go` |
+| Series + uPlot + range bands | `web/src/lib/charts.ts` |
+| DOM / resize | `web/src/components/LatencyChart.svelte` |
+| Types | `metrics.ChartBucket` + `web/src/lib/api.ts` |
+
+Components do not aggregate or call `fetch`.
+
+## Theme tokens
+
+Read from `chartTheme()` — never hardcode hex or chart height.
+
+| Token | Use |
+|-------|-----|
+| `--color-accent` | Average line |
+| `--color-chart-envelope` | Range band cap strokes |
+| `--color-chart-envelope-fill` | Range band fill |
+| `--color-text-muted` | Axes |
+| `--chart-height` | Height |
+
+## Windows
+
+Rolling (`connection`, `latencyChart`): user dropdown. Fixed (`live`): 60 s always. Label scope in titles via `DASHBOARD_METRICS`.
+
+## Scalars
+
+`formatMs` / `formatPercent` from `status.ts`; null → `—`. Status tiers use `--color-status-*` on cards only, not chart lines.
+
+## Tests
+
+Deterministic timestamps for every aggregation function (Go `buckets_test.go`, Vitest `charts.test.ts`, `windows.test.ts`).
+
+## Do not
+
+- Raw 1 Hz plots for long windows without bucketing
+- Connected min/max line series across buckets
+- Pixel-width-derived bucket sizing
+- Client re-bucket on resize
+- Uniform index downsampling for time series (removed legacy `Downsample`)
+- Aggregation in components
+- Chart colors implying status tier
+- Interpolating across loss gaps
+- Sliding-window-relative bin indices or re-bucketing on status clock tick
+- Full chart refetch on every SSE sample
+- Recomputing bucket centers from `now` on each render

@@ -1,11 +1,40 @@
 package store
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 	"time"
 )
+
+func TestParseTS(t *testing.T) {
+	cases := []struct {
+		raw  string
+		want time.Time
+	}{
+		{
+			raw:  "2026-06-16T10:00:00Z",
+			want: time.Date(2026, 6, 16, 10, 0, 0, 0, time.UTC),
+		},
+		{
+			raw:  "2026-06-16T10:00:00+00:00",
+			want: time.Date(2026, 6, 16, 10, 0, 0, 0, time.UTC),
+		},
+		{
+			raw:  "2026-06-16T10:00:00.123456789Z",
+			want: time.Date(2026, 6, 16, 10, 0, 0, 123456789, time.UTC),
+		},
+	}
+
+	for _, tc := range cases {
+		got, err := ParseTS(tc.raw)
+		if err != nil {
+			t.Fatalf("ParseTS(%q): %v", tc.raw, err)
+		}
+		if !got.Equal(tc.want) {
+			t.Fatalf("ParseTS(%q)=%v want %v", tc.raw, got, tc.want)
+		}
+	}
+}
 
 func TestStoreInsertQueryPrune(t *testing.T) {
 	dir := t.TempDir()
@@ -50,19 +79,4 @@ func TestStoreInsertQueryPrune(t *testing.T) {
 	if len(samples) != 1 {
 		t.Fatalf("after prune samples=%d", len(samples))
 	}
-}
-
-func TestDownsample(t *testing.T) {
-	samples := make([]Sample, 10)
-	for i := range samples {
-		samples[i] = Sample{TS: time.Now().UTC().Format(time.RFC3339Nano)}
-	}
-	out := Downsample(samples, 5)
-	if len(out) != 5 {
-		t.Fatalf("downsample len=%d", len(out))
-	}
-}
-
-func TestMain(m *testing.M) {
-	os.Exit(m.Run())
 }

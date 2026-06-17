@@ -13,10 +13,10 @@ import (
 	"network-monitor/internal/store"
 )
 
-func TestHealthAndSummary(t *testing.T) {
+func testHandlers(t *testing.T) (*Handlers, *store.Store) {
+	t.Helper()
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, "config.yaml")
-	cfgMgr, err := config.NewManager(cfgPath)
+	cfgMgr, err := config.NewManager(filepath.Join(dir, "config.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -24,17 +24,23 @@ func TestHealthAndSummary(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer st.Close()
+	t.Cleanup(func() { st.Close() })
+	return NewHandlers(cfgMgr, st, NewSSEHub(), time.Now()), st
+}
+
+func TestHealthAndSummary(t *testing.T) {
+	h, st := testHandlers(t)
 
 	lat := 25.0
-	_ = st.Insert(store.Sample{
-		TS:        time.Now().UTC().Format(time.RFC3339Nano),
+	sampleTS := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := st.Insert(store.Sample{
+		TS:        sampleTS,
 		Host:      "1.1.1.1",
 		Success:   true,
 		LatencyMs: &lat,
-	})
-
-	h := NewHandlers(cfgMgr, st, NewSSEHub(), time.Now())
+	}); err != nil {
+		t.Fatal(err)
+	}
 
 	t.Run("health", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
@@ -60,26 +66,142 @@ func TestHealthAndSummary(t *testing.T) {
 			t.Fatalf("summary=%v", payload)
 		}
 	})
+
+	t.Run("samples buckets", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/samples?minutes=30", nil)
+		rec := httptest.NewRecorder()
+		h.Samples(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%d", rec.Code)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		buckets, ok := payload["buckets"].([]any)
+		if !ok || len(buckets) < 1 {
+			t.Fatalf("buckets=%v", payload["buckets"])
+		}
+		first, ok := buckets[0].(map[string]any)
+		if !ok {
+			t.Fatalf("bucket type=%T", buckets[0])
+		}
+		if first["avg_ms"] == nil || first["min_ms"] == nil || first["max_ms"] == nil {
+			t.Fatalf("bucket fields=%v", first)
+		}
+		if first["sample_count"].(float64) < 1 {
+			t.Fatalf("sample_count=%v", first["sample_count"])
+		}
+		if _, ok := payload["bucket_seconds"]; !ok {
+			t.Fatalf("missing bucket_seconds in %v", payload)
+		}
+		if payload["bucket_seconds"].(float64) != 6 {
+			t.Fatalf("bucket_seconds=%v want 6 for 30 min window", payload["bucket_seconds"])
+		}
+	})
+
+	t.Run("live last_ts", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/live", nil)
+		rec := httptest.NewRecorder()
+		h.Live(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%d", rec.Code)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["last_ts"] == nil || payload["last_ts"] == "" {
+			t.Fatalf("last_ts missing in %v", payload)
+		}
+		if payload["last_success"] != true {
+			t.Fatalf("last_success=%v want true", payload["last_success"])
+		}
+	})
+
+	t.Run("config live window", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/api/config", nil)
+		rec := httptest.NewRecorder()
+		h.GetConfig(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("status=%d", rec.Code)
+		}
+		var payload map[string]any
+		if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+			t.Fatal(err)
+		}
+		if payload["live_window_seconds"].(float64) != 60 {
+			t.Fatalf("live_window_seconds=%v", payload["live_window_seconds"])
+		}
+	})
+}
+
+func TestQueryMinutes(t *testing.T) {
+	cases := []struct {
+		name       string
+		query      string
+		retention  int
+		want       int
+	}{
+		{name: "default", query: "", retention: 180, want: 30},
+		{name: "explicit", query: "15", retention: 180, want: 15},
+		{name: "clamp low", query: "0", retention: 180, want: 1},
+		{name: "clamp high", query: "999", retention: 60, want: 60},
+		{name: "retention below default", query: "", retention: 10, want: 10},
+		{name: "invalid", query: "abc", retention: 180, want: 30},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			url := "/api/summary"
+			if tc.query != "" {
+				url += "?minutes=" + tc.query
+			}
+			req := httptest.NewRequest(http.MethodGet, url, nil)
+			got := queryMinutes(req, tc.retention)
+			if got != tc.want {
+				t.Fatalf("queryMinutes=%d want %d", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestWindowOptions(t *testing.T) {
+	got := windowOptions(180)
+	want := []int{5, 15, 30, 60, 120, 180}
+	if len(got) != len(want) {
+		t.Fatalf("len=%d want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("options[%d]=%d want %d", i, got[i], want[i])
+		}
+	}
+
+	short := windowOptions(3)
+	if len(short) != 1 || short[0] != 3 {
+		t.Fatalf("short retention options=%v want [3]", short)
+	}
 }
 
 func TestPutConfigLocalhostAllowed(t *testing.T) {
-	dir := t.TempDir()
-	cfgMgr, err := config.NewManager(filepath.Join(dir, "config.yaml"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	st, err := store.Open(filepath.Join(dir, "monitor.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer st.Close()
-
-	h := NewHandlers(cfgMgr, st, NewSSEHub(), time.Now())
+	h, _ := testHandlers(t)
 	req := httptest.NewRequest(http.MethodPut, "/api/config", strings.NewReader(`{"target":"8.8.8.8"}`))
 	req.Host = "127.0.0.1:8080"
 	rec := httptest.NewRecorder()
 	h.PutConfig(rec, req)
 	if rec.Code != http.StatusOK {
 		t.Fatalf("status=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestPutConfigForbidden(t *testing.T) {
+	h, _ := testHandlers(t)
+	req := httptest.NewRequest(http.MethodPut, "/api/config", strings.NewReader(`{"target":"8.8.8.8"}`))
+	req.Host = "192.168.1.10:8080"
+	rec := httptest.NewRecorder()
+	h.PutConfig(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status=%d want 403", rec.Code)
 	}
 }

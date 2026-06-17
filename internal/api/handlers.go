@@ -14,6 +14,8 @@ import (
 	"network-monitor/internal/store"
 )
 
+const liveWindowSeconds = 60
+
 type Handlers struct {
 	cfgMgr    *config.Manager
 	store     *store.Store
@@ -42,6 +44,7 @@ func (h *Handlers) GetConfig(w http.ResponseWriter, r *http.Request) {
 		"listen_port":             cfg.ListenPort,
 		"thresholds":              cfg.Thresholds,
 		"window_options_minutes":  windowOptions(cfg.RetentionMinutes),
+		"live_window_seconds":     liveWindowSeconds,
 	})
 }
 
@@ -77,9 +80,7 @@ func (h *Handlers) PutConfig(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) Summary(w http.ResponseWriter, r *http.Request) {
-	minutes := queryMinutes(r, h.cfgMgr.Get().RetentionMinutes)
-	since := time.Now().Add(-time.Duration(minutes) * time.Minute)
-	samples, err := h.store.QuerySince(since)
+	minutes, samples, _, err := h.samplesForWindow(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -90,26 +91,35 @@ func (h *Handlers) Summary(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handlers) Samples(w http.ResponseWriter, r *http.Request) {
-	minutes := queryMinutes(r, h.cfgMgr.Get().RetentionMinutes)
-	since := time.Now().Add(-time.Duration(minutes) * time.Minute)
-	samples, err := h.store.QuerySince(since)
+	minutes, samples, since, err := h.samplesForWindow(r)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	samples = store.Downsample(samples, 1500)
-	writeJSON(w, map[string]any{"samples": samples, "window_minutes": minutes})
+	bucketSeconds := metrics.DisplayBucketSeconds(minutes)
+	buckets := metrics.AggregateBuckets(samples, since, bucketSeconds)
+	writeJSON(w, map[string]any{
+		"buckets":        buckets,
+		"window_minutes": minutes,
+		"bucket_seconds": bucketSeconds,
+	})
+}
+
+func (h *Handlers) samplesForWindow(r *http.Request) (minutes int, samples []store.Sample, since time.Time, err error) {
+	minutes = queryMinutes(r, h.cfgMgr.Get().RetentionMinutes)
+	since = time.Now().Add(-time.Duration(minutes) * time.Minute)
+	samples, err = h.store.QuerySince(since)
+	return minutes, samples, since, err
 }
 
 func (h *Handlers) Live(w http.ResponseWriter, r *http.Request) {
-	since := time.Now().Add(-60 * time.Second)
+	since := time.Now().Add(-liveWindowSeconds * time.Second)
 	samples, err := h.store.QuerySince(since)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	cfg := h.cfgMgr.Get()
-	writeJSON(w, metrics.ComputeLive(samples, cfg.Thresholds))
+	writeJSON(w, metrics.ComputeLive(samples))
 }
 
 func (h *Handlers) allowConfigWrite(r *http.Request) bool {

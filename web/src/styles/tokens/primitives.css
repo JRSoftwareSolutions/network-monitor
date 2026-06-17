@@ -1,0 +1,62 @@
+:root {
+  /* palette */
+  --palette-slate-950: #04111f;
+  --palette-slate-900: #0b1220;
+  --palette-slate-850: #111a2e;
+  --palette-slate-700: #243049;
+  --palette-slate-500: #64748b;
+  --palette-slate-400: #94a3b8;
+  --palette-slate-200: #e2e8f0;
+  --palette-blue-950: #172554;
+  --palette-sky-400: #38bdf8;
+  --palette-green-500: #22c55e;
+  --palette-yellow-500: #eab308;
+  --palette-orange-500: #f97316;
+  --palette-red-500: #ef4444;
+
+  /* spacing */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+
+  /* radii */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-full: 999px;
+
+  /* typography */
+  --font-sans: "Segoe UI", system-ui, sans-serif;
+  --text-xs: 0.8rem;
+  --text-sm: 0.85rem;
+  --text-md: 0.95rem;
+  --text-lg: 1.1rem;
+  --text-2xl: 1.6rem;
+  --font-semibold: 600;
+  --font-bold: 700;
+
+  /* layout thresholds */
+  --breakpoint-md: 800px;
+  --breakpoint-ultrawide-min: 56rem;
+  --aspect-ultrawide-min: 2.1;
+
+  /* layout tokens (normal mode defaults) */
+  --page-max-width: 1100px;
+  --chart-height: 260px;
+  --layout-gap: var(--space-4);
+  --layout-page-padding: var(--space-6);
+  --layout-topbar-direction: row;
+  --layout-dashboard-columns: repeat(2, minmax(0, 1fr));
+  --layout-dashboard-areas:
+    "connection live"
+    "chart chart";
+  --layout-metrics-columns: repeat(3, minmax(0, 1fr));
+  --layout-metrics-detail-display: none;
+  --layout-stat-columns: repeat(2, minmax(0, 1fr));
+
+  /* overlays */
+  --overlay-bg: rgba(2, 6, 23, 0.65);
+}

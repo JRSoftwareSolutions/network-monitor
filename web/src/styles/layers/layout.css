@@ -1,0 +1,94 @@
+.page {
+  container-type: inline-size;
+  container-name: page;
+  max-width: var(--page-max-width);
+  margin: 0 auto;
+  padding: var(--layout-page-padding);
+}
+
+.topbar {
+  display: flex;
+  flex-direction: var(--layout-topbar-direction);
+  justify-content: space-between;
+  gap: var(--space-4);
+  align-items: flex-start;
+  margin-bottom: var(--space-6);
+}
+
+.topbar h1 {
+  margin: 0;
+  font-size: var(--text-2xl);
+}
+
+.topbar .sub {
+  margin: var(--space-1) 0 0;
+  color: var(--color-text-muted);
+}
+
+.topbar-actions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.window-select {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  color: var(--color-text-muted);
+}
+
+.dashboard-grid {
+  display: grid;
+  gap: var(--layout-gap);
+  grid-template-columns: var(--layout-dashboard-columns);
+  grid-template-areas: var(--layout-dashboard-areas);
+}
+
+.layout-metrics-grid {
+  grid-template-columns: var(--layout-metrics-columns);
+}
+
+@container page (max-width: var(--breakpoint-md)) {
+  .page {
+    --layout-topbar-direction: column;
+    --layout-page-padding: var(--space-4);
+    --layout-dashboard-columns: 1fr;
+    --layout-dashboard-areas:
+      "connection"
+      "live"
+      "chart";
+    --layout-metrics-columns: 1fr;
+    --layout-metrics-detail-display: flex;
+    --layout-stat-columns: 1fr;
+  }
+}
+
+@media (min-aspect-ratio: 2.1 / 1) and (min-width: 56rem) {
+  .page {
+    --page-max-width: min(100%, 90rem);
+    --chart-height: 380px;
+    --layout-dashboard-columns: 22rem minmax(0, 1fr);
+    --layout-dashboard-areas:
+      "connection chart"
+      "live chart";
+    --layout-metrics-columns: 1fr;
+    --layout-metrics-detail-display: flex;
+  }
+}
+
+@media (orientation: portrait) and (max-width: 900px) {
+  .page {
+    --layout-topbar-direction: column;
+    --layout-page-padding: var(--space-4);
+    --layout-dashboard-columns: 1fr;
+    --layout-dashboard-areas:
+      "connection"
+      "live"
+      "chart";
+    --layout-metrics-columns: 1fr;
+    --layout-metrics-detail-display: flex;
+    --layout-stat-columns: 1fr;
+  }
+}

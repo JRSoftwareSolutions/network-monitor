@@ -5,6 +5,13 @@ cd /d "%~dp0"
 
 where go >nul 2>&1
 if errorlevel 1 (
+    if exist "C:\Program Files\Go\bin\go.exe" (
+        set "PATH=C:\Program Files\Go\bin;%PATH%"
+    )
+)
+if exist "%USERPROFILE%\go\bin" set "PATH=%USERPROFILE%\go\bin;%PATH%"
+where go >nul 2>&1
+if errorlevel 1 (
     echo Go is not installed. Install from https://go.dev/dl/ and retry.
     pause
     exit /b 1
@@ -25,9 +32,8 @@ if errorlevel 1 exit /b 1
 popd
 
 echo Syncing static assets...
-if exist internal\api\dist rmdir /s /q internal\api\dist
-mkdir internal\api\dist
-xcopy /e /i /q web\dist\* internal\api\dist\ >nul
+call npm run sync-web
+if errorlevel 1 exit /b 1
 
 echo Building monitor...
 go build -o bin\monitor.exe ./cmd/monitor

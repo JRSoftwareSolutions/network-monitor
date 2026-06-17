@@ -20,6 +20,7 @@ export interface AppConfig {
   listen_port: number;
   thresholds: Thresholds;
   window_options_minutes: number[];
+  live_window_seconds: number;
 }
 
 export interface Sample {
@@ -28,6 +29,14 @@ export interface Sample {
   success: boolean;
   latency_ms?: number;
   jitter_ms?: number;
+}
+
+export interface ChartBucket {
+  ts: string;
+  avg_ms?: number | null;
+  min_ms?: number | null;
+  max_ms?: number | null;
+  sample_count: number;
 }
 
 export interface Summary {
@@ -44,10 +53,17 @@ export interface Summary {
 }
 
 export interface LiveMetrics {
+  last_ts?: string;
+  last_success: boolean;
   latency_ms?: number;
+  min_latency_ms?: number;
+  max_latency_ms?: number;
   jitter_ms?: number;
+  min_jitter_ms?: number;
+  max_jitter_ms?: number;
   loss_percent: number;
   sample_count: number;
+  success_count: number;
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -66,8 +82,8 @@ export function getSummary(minutes: number) {
   return fetchJson<Summary>(`/api/summary?minutes=${minutes}`);
 }
 
-export function getSamples(minutes: number) {
-  return fetchJson<{ samples: Sample[]; window_minutes: number }>(
+export function getChartBuckets(minutes: number) {
+  return fetchJson<{ buckets: ChartBucket[]; window_minutes: number; bucket_seconds: number }>(
     `/api/samples?minutes=${minutes}`,
   );
 }

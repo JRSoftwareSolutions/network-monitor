@@ -1,0 +1,51 @@
+---
+description: CSS and styling conventions — tokens, layers, scoped Svelte styles
+globs: web/src/**
+---
+
+# Styling conventions
+
+## Tokens first
+
+Never hardcode colors or spacing in components. Use semantic tokens (`var(--color-*)`, `var(--space-*)`, etc.). Add a semantic token in `web/src/styles/tokens/semantic.css` if one does not exist.
+
+Primitive palette values (`--palette-*`) live only in `primitives.css`. Components must not reference `--palette-*` directly.
+
+## File layout
+
+| Location | Purpose |
+|----------|---------|
+| `web/src/styles/tokens/` | Primitives, semantic aliases, theme files |
+| `web/src/styles/layers/` | Reset, base, layout modes, shared component rules |
+| `web/src/styles/index.css` | `@layer` declaration and ordered imports |
+| Component `<style>` blocks | Layout and component-specific rules |
+
+## Scoped by default
+
+New component layout goes in that component's scoped `<style>` block. Promote rules to `layers/components.css` only when reused in two or more components.
+
+## State and tests
+
+Use `data-*` attributes for visual state (`data-status`, `data-state`), not dynamic class strings. Preserve stable hooks used by e2e: `.pill[data-state]`, `.window-select select`, `getByRole` headings.
+
+## Charts and canvas
+
+Read colors and dimensions from `web/src/lib/theme.ts` (`chartTheme(el)`, `cssVar(name, el)`). Pass the chart container (or nearest `.page`) so `--chart-height` reflects the active layout mode. Chart envelope uses `--color-chart-envelope` and `--color-chart-envelope-fill`. Do not hardcode hex or pixel heights in chart code.
+
+## Responsive layout modes
+
+Three modes driven by **container queries on `.page`** (see `web/src/styles/layers/layout.css`):
+
+| Mode | Detection | Dashboard |
+|------|-----------|-----------|
+| **Vertical** | Container width ≤ `--breakpoint-md` | Single column stack |
+| **Normal** | Default | Connection \| Live, chart full width below |
+| **Ultrawide** | Container ≥ `--breakpoint-ultrawide-min` and aspect ≥ 2.1:1 | Sidebar: cards left, chart right |
+
+Rules for new UI:
+
+- Do **not** add component-level `@media` for dashboard layout; override `--layout-*` tokens in `layout.css` instead.
+- Consume `var(--layout-*)` for grids, gaps, and column counts (`--layout-metrics-columns`, `--layout-stat-columns`, etc.).
+- New dashboard panels need a named `grid-area` in `--layout-dashboard-areas` and `grid-area` on the component root.
+- Threshold tokens live in `primitives.css` (`--breakpoint-md`, `--breakpoint-ultrawide-min`); use them in `@container page` rules.
+- `@media` queries cannot use `var()` for breakpoints — use the matching literal value in `layout.css` (e.g. `56rem` for ultrawide) and keep the token in `primitives.css` as the source of truth.

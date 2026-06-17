@@ -35,6 +35,9 @@ Edit [`config.yaml`](config.yaml):
 | `listen_host` | Bind address (`0.0.0.0` for LAN) | `127.0.0.1` |
 | `listen_port` | HTTP port | `8080` |
 | `data_dir` | Directory for `monitor.db` | `./data` |
+| `thresholds.ping_max`, `thresholds.jitter_max` | Exposed in config; not used in tier classification today | see `config.yaml` |
+
+Each ping attempt times out after **1.5 s** if the target does not respond (not configurable).
 
 ### LAN access
 
@@ -56,34 +59,30 @@ Send `Authorization: Bearer your-secret` or `X-Config-Token: your-secret` with s
 | `GET` | `/api/config` | Current settings and thresholds |
 | `PUT` | `/api/config` | Update target, interval, retention |
 | `GET` | `/api/summary?minutes=` | Window aggregates and status tier |
-| `GET` | `/api/samples?minutes=` | Downsampled chart series |
-| `GET` | `/api/live` | Rolling 60s live metrics |
+| `GET` | `/api/samples?minutes=` | Time-bucketed chart series (`buckets`, tier-derived `bucket_seconds`, min/max/avg per bucket) |
+| `GET` | `/api/live` | Rolling 60s window (`last_ts`, `last_success`, avg/min/max latency and jitter, loss %, sample and success counts) |
 | `GET` | `/api/events` | SSE stream (`sample`, `config` events) |
 
 ## Development
 
-Terminal 1 — API and collector:
+Double-click **`dev.bat`** (or run `npm run dev` from the repo root). It starts the Go API and Vite dev server, then opens [http://127.0.0.1:5173](http://127.0.0.1:5173). UI changes hot-reload; restart the API window after Go changes.
+
+Manual two-terminal workflow:
 
 ```bash
-go run ./cmd/monitor
+go run ./cmd/monitor          # Terminal 1 — API on :8080
+cd web && npm run dev         # Terminal 2 — Vite on :5173, proxies /api
 ```
-
-Terminal 2 — Vite dev server (proxies `/api` to `:8080`):
-
-```bash
-cd web && npm run dev
-```
-
-Open [http://127.0.0.1:5173](http://127.0.0.1:5173).
 
 ## Tests
 
+From the repo root:
+
 ```bash
-go test ./...
-cd web && npm run test
-npm run build   # ensure bin/monitor.exe exists
-npx playwright test
+npm test
 ```
+
+This runs Go unit tests, Vitest, builds the binary, and runs Playwright e2e tests.
 
 ## Architecture
 
@@ -96,3 +95,7 @@ web/                  Vite + Svelte + uPlot dashboard
 ```
 
 Samples are pushed to browsers via SSE; history and aggregates are fetched over REST. One binary embeds the built frontend — no Python runtime or CDN dependencies.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for dev guidelines, PR checklist, and Windows terminal notes. Maintainer details (data flow, API contract, extension points) are in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).

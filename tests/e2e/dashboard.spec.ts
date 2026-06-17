@@ -17,7 +17,117 @@ test("settings can change target", async ({ page }) => {
 
 test("live metrics update over time", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByText("Live (60s)")).toBeVisible();
-  await page.waitForTimeout(3500);
-  await expect(page.locator(".pill[data-state='online'], .pill[data-state='stale']")).toBeVisible();
+  const liveCard = page.locator("section.card", {
+    has: page.getByRole("heading", { name: "Live (60s)" }),
+  });
+  await expect(liveCard).toBeVisible();
+  await expect(liveCard.getByText("Avg latency")).toBeVisible();
+  await expect(liveCard.getByText("Avg jitter")).toBeVisible();
+  await expect(liveCard.getByText("Packet loss")).toBeVisible();
+  const pill = page.locator(".pill[data-state]");
+  await expect(pill).toHaveAttribute("data-state", /online|stale/, { timeout: 8000 });
+});
+
+test("window dropdown updates rolling scope labels", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Connection (30 min)" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Latency (30 min)" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Live (60s)" })).toBeVisible();
+
+  await page.locator(".window-select select").selectOption("5");
+  await expect(page.getByRole("heading", { name: "Connection (5 min)" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Latency (5 min)" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Live (60s)" })).toBeVisible();
+});
+
+test("window selection persists after refresh", async ({ page }) => {
+  await page.goto("/");
+  await page.locator(".window-select select").selectOption("5");
+  await expect(page.getByRole("heading", { name: "Connection (5 min)" })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("heading", { name: "Connection (5 min)" })).toBeVisible();
+});
+
+test("window change keeps connection pill online", async ({ page }) => {
+  await page.goto("/");
+  const pill = page.locator(".pill[data-state]");
+  await expect(pill).toHaveAttribute("data-state", /online|stale/, { timeout: 8000 });
+
+  await page.locator(".window-select select").selectOption("60");
+  await expect(page.getByRole("heading", { name: "Connection (60 min)" })).toBeVisible();
+  await expect(pill).toHaveAttribute("data-state", /online|stale/);
+
+  await page.locator(".window-select select").selectOption("180");
+  await expect(page.getByRole("heading", { name: "Connection (180 min)" })).toBeVisible();
+  await expect(pill).toHaveAttribute("data-state", /online|stale/);
+});
+
+test("latency chart container present after window change", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.locator(".chart-wrap")).toBeVisible();
+  await page.locator(".window-select select").selectOption("5");
+  await expect(page.locator(".chart-wrap")).toBeVisible();
+});
+
+test.describe("layout modes", () => {
+  const connection = (page: import("@playwright/test").Page) => page.locator(".connection-status");
+  const live = (page: import("@playwright/test").Page) =>
+    page.locator("section.card", {
+      has: page.getByRole("heading", { name: /Live \(60s\)/ }),
+    });
+  const chart = (page: import("@playwright/test").Page) => page.locator(".chart-span");
+
+  test("vertical: cards stack above chart", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Network Monitor" })).toBeVisible();
+
+    const connBox = await connection(page).boundingBox();
+    const chartBox = await chart(page).boundingBox();
+    expect(connBox).not.toBeNull();
+    expect(chartBox).not.toBeNull();
+    expect(chartBox!.y).toBeGreaterThan(connBox!.y);
+  });
+
+  test("normal: connection and live side by side", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Network Monitor" })).toBeVisible();
+
+    const connBox = await connection(page).boundingBox();
+    const liveBox = await live(page).boundingBox();
+    expect(connBox).not.toBeNull();
+    expect(liveBox).not.toBeNull();
+    expect(Math.abs(connBox!.y - liveBox!.y)).toBeLessThan(40);
+    expect(connBox!.x).toBeLessThan(liveBox!.x);
+  });
+
+  test("ultrawide: chart beside connection cards", async ({ page }) => {
+    await page.setViewportSize({ width: 2560, height: 1080 });
+    await page.goto("/");
+    await expect(page.getByRole("heading", { name: "Network Monitor" })).toBeVisible();
+
+    const connBox = await connection(page).boundingBox();
+    const chartBox = await chart(page).boundingBox();
+    expect(connBox).not.toBeNull();
+    expect(chartBox).not.toBeNull();
+    expect(chartBox!.x).toBeGreaterThan(connBox!.x);
+    expect(chartBox!.height).toBeGreaterThan(connBox!.height);
+  });
+
+  test("vertical: live metric detail stats visible", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/");
+    const liveCard = live(page);
+    await expect(liveCard.getByText("Min", { exact: true })).toBeVisible();
+    await expect(liveCard.getByText("Lost", { exact: true })).toBeVisible();
+  });
+
+  test("normal: live metric detail stats hidden", async ({ page }) => {
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto("/");
+    const liveCard = live(page);
+    await expect(liveCard.getByText("Min", { exact: true })).toBeHidden();
+    await expect(liveCard.getByText("Lost", { exact: true })).toBeHidden();
+  });
 });

@@ -1,16 +1,7 @@
 node_modules/
 web/node_modules/
 test-results/
-logs/
 data/
 bin/
-screenshots/
-__pycache__/
-.pytest_cache/
-*.py[cod]
-.venv/
-venv/
-.env
-build/
 dist/
-NetworkMonitor/
+.env

@@ -68,3 +68,35 @@
     </form>
   </aside>
 {/if}
+
+<style>
+  .settings-panel {
+    position: fixed;
+    top: 0;
+    right: 0;
+    width: min(360px, 100%);
+    height: 100%;
+    background: var(--color-surface);
+    border-left: 1px solid var(--color-border);
+    padding: var(--space-4);
+    z-index: 10;
+  }
+
+  .settings-panel header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--space-4);
+  }
+
+  .settings-panel form {
+    display: grid;
+    gap: var(--space-4);
+  }
+
+  .settings-panel label {
+    display: grid;
+    gap: var(--space-1);
+    color: var(--color-text-muted);
+  }
+</style>

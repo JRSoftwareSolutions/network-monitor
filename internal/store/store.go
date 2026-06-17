@@ -97,47 +97,6 @@ func (s *Store) QuerySince(since time.Time) ([]Sample, error) {
 	return out, rows.Err()
 }
 
-func (s *Store) Latest() (*Sample, error) {
-	row := s.db.QueryRow(
-		`SELECT ts, host, success, latency_ms, jitter_ms FROM samples ORDER BY ts DESC LIMIT 1`,
-	)
-	var sample Sample
-	var success int
-	var latency, jitter sql.NullFloat64
-	if err := row.Scan(&sample.TS, &sample.Host, &success, &latency, &jitter); err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
-		return nil, err
-	}
-	sample.Success = success == 1
-	if latency.Valid {
-		v := latency.Float64
-		sample.LatencyMs = &v
-	}
-	if jitter.Valid {
-		v := jitter.Float64
-		sample.JitterMs = &v
-	}
-	return &sample, nil
-}
-
-func Downsample(samples []Sample, maxPoints int) []Sample {
-	if maxPoints < 2 || len(samples) <= maxPoints {
-		return samples
-	}
-	step := float64(len(samples)-1) / float64(maxPoints-1)
-	out := make([]Sample, 0, maxPoints)
-	for i := 0; i < maxPoints; i++ {
-		idx := int(float64(i) * step)
-		if idx >= len(samples) {
-			idx = len(samples) - 1
-		}
-		out = append(out, samples[idx])
-	}
-	return out
-}
-
 func ParseTS(ts string) (time.Time, error) {
 	if len(ts) > 0 && ts[len(ts)-1] == 'Z' {
 		ts = ts[:len(ts)-1] + "+00:00"

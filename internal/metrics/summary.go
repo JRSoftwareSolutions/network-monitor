@@ -3,7 +3,6 @@ package metrics
 import (
 	"math"
 	"sort"
-	"time"
 
 	"network-monitor/internal/config"
 	"network-monitor/internal/store"
@@ -32,10 +31,17 @@ type Summary struct {
 }
 
 type LiveMetrics struct {
-	LatencyMs *float64 `json:"latency_ms,omitempty"`
-	JitterMs  *float64 `json:"jitter_ms,omitempty"`
-	LossPercent float64 `json:"loss_percent"`
-	SampleCount int     `json:"sample_count"`
+	LastTS        string   `json:"last_ts,omitempty"`
+	LastSuccess   bool     `json:"last_success"`
+	LatencyMs     *float64 `json:"latency_ms,omitempty"`
+	MinLatencyMs  *float64 `json:"min_latency_ms,omitempty"`
+	MaxLatencyMs  *float64 `json:"max_latency_ms,omitempty"`
+	JitterMs      *float64 `json:"jitter_ms,omitempty"`
+	MinJitterMs   *float64 `json:"min_jitter_ms,omitempty"`
+	MaxJitterMs   *float64 `json:"max_jitter_ms,omitempty"`
+	LossPercent   float64  `json:"loss_percent"`
+	SampleCount   int      `json:"sample_count"`
+	SuccessCount  int      `json:"success_count"`
 }
 
 func ComputeSummary(samples []store.Sample, windowMinutes int, thresholds config.Thresholds) Summary {
@@ -61,7 +67,7 @@ func ComputeSummary(samples []store.Sample, windowMinutes int, thresholds config
 	}
 
 	if summary.SampleCount > 0 {
-		summary.LossPercent = round2(float64(summary.SampleCount-summary.SuccessCount) / float64(summary.SampleCount) * 100)
+		summary.LossPercent = lossPercent(summary.SampleCount, summary.SuccessCount)
 	}
 
 	if len(latencies) > 0 {
@@ -90,31 +96,61 @@ func ComputeSummary(samples []store.Sample, windowMinutes int, thresholds config
 	return summary
 }
 
-func ComputeLive(samples []store.Sample, thresholds config.Thresholds) LiveMetrics {
+func ComputeLive(samples []store.Sample) LiveMetrics {
 	live := LiveMetrics{}
 	if len(samples) == 0 {
 		return live
 	}
-	latest := samples[len(samples)-1]
-	if latest.LatencyMs != nil {
-		live.LatencyMs = latest.LatencyMs
-	}
-	if latest.JitterMs != nil {
-		live.JitterMs = latest.JitterMs
-	}
 
-	success := 0
+	latest := samples[len(samples)-1]
+	live.LastTS = latest.TS
+	live.LastSuccess = latest.Success
+
+	var latencies []float64
+	var jitters []float64
 	for _, s := range samples {
 		live.SampleCount++
 		if s.Success {
-			success++
+			live.SuccessCount++
+			if s.LatencyMs != nil {
+				latencies = append(latencies, *s.LatencyMs)
+			}
+			if s.JitterMs != nil {
+				jitters = append(jitters, *s.JitterMs)
+			}
 		}
 	}
+
 	if live.SampleCount > 0 {
-		live.LossPercent = round2(float64(live.SampleCount-success) / float64(live.SampleCount) * 100)
+		live.LossPercent = lossPercent(live.SampleCount, live.SuccessCount)
 	}
-	_ = thresholds
+	if len(latencies) > 0 {
+		live.LatencyMs = ptr(round2(mean(latencies)))
+		minV, maxV := minMax(latencies)
+		live.MinLatencyMs = ptr(round2(minV))
+		live.MaxLatencyMs = ptr(round2(maxV))
+	}
+	if len(jitters) > 0 {
+		live.JitterMs = ptr(round2(mean(jitters)))
+		minV, maxV := minMax(jitters)
+		live.MinJitterMs = ptr(round2(minV))
+		live.MaxJitterMs = ptr(round2(maxV))
+	}
 	return live
+}
+
+func minMax(values []float64) (float64, float64) {
+	minV := values[0]
+	maxV := values[0]
+	for _, v := range values[1:] {
+		if v < minV {
+			minV = v
+		}
+		if v > maxV {
+			maxV = v
+		}
+	}
+	return minV, maxV
 }
 
 func ClassifyStatus(s Summary, t config.Thresholds) StatusTier {
@@ -140,24 +176,11 @@ func ClassifyStatus(s Summary, t config.Thresholds) StatusTier {
 	if avgPing <= t.PingGood && avgJitter <= t.JitterGood && s.LossPercent <= t.LossGood {
 		return TierOK
 	}
-	if avgPing <= t.PingOkay && avgJitter <= t.JitterOkay && s.LossPercent <= t.LossOkay {
-		return TierPoor
-	}
 	return TierPoor
 }
 
-func FilterSince(samples []store.Sample, since time.Time) []store.Sample {
-	out := make([]store.Sample, 0, len(samples))
-	for _, s := range samples {
-		ts, err := store.ParseTS(s.TS)
-		if err != nil {
-			continue
-		}
-		if !ts.Before(since) {
-			out = append(out, s)
-		}
-	}
-	return out
+func lossPercent(total, success int) float64 {
+	return round2(float64(total-success) / float64(total) * 100)
 }
 
 func mean(values []float64) float64 {

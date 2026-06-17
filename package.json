@@ -1,6 +1,7 @@
 {
   "private": true,
   "scripts": {
+    "dev": "dev.bat",
     "web:install": "cd web && npm install",
     "web:build": "cd web && npm run build",
     "sync-web": "powershell -NoProfile -Command \"if (Test-Path internal/api/dist) { Remove-Item -Recurse -Force internal/api/dist }; New-Item -ItemType Directory -Force internal/api/dist | Out-Null; Copy-Item -Recurse web/dist/* internal/api/dist/\"",
@@ -8,6 +9,7 @@
     "test:go": "go test ./...",
     "test:unit": "cd web && npm run test",
     "test:e2e": "playwright test",
+    "pretest:e2e": "npm run build",
     "test": "npm run test:go && npm run test:unit && npm run test:e2e"
   },
   "devDependencies": {
