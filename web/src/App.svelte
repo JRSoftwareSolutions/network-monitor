@@ -124,7 +124,7 @@
 
   <main class="dashboard-grid">
     <ConnectionStatusCard {windowMinutes} thresholds={config?.thresholds} />
-    <LiveMetricsCard />
+    <LiveMetricsCard thresholds={config?.thresholds} />
     <ChartPanel {windowMinutes} />
   </main>
 </div>

@@ -1,9 +1,15 @@
 <script lang="ts">
   import LiveMetrics from "./LiveMetrics.svelte";
-  import { getLive, type LiveMetrics as LiveMetricsType } from "../lib/api";
+  import { getLive, type LiveMetrics as LiveMetricsType, type Thresholds } from "../lib/api";
   import { adoptConnectionSample } from "../lib/connectionSample";
   import { subscribeLiveRefresh } from "../lib/liveRefresh";
   import { DASHBOARD_METRICS } from "../lib/windows";
+
+  let {
+    thresholds,
+  }: {
+    thresholds?: Thresholds;
+  } = $props();
 
   let live = $state<LiveMetricsType | null>(null);
   let loadSeq = 0;
@@ -29,6 +35,7 @@
 
 <LiveMetrics
   title={DASHBOARD_METRICS.live.title(0)}
+  {thresholds}
   latency={live?.latency_ms}
   minLatency={live?.min_latency_ms}
   maxLatency={live?.max_latency_ms}

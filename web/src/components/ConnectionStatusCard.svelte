@@ -42,7 +42,9 @@
     title={DASHBOARD_METRICS.connection.title(windowMinutes)}
     status={summary?.status ?? "offline"}
     {qualityPercent}
+    thresholds={thresholds ?? DEFAULT_THRESHOLDS}
     avgLatency={summary?.avg_latency_ms}
+    p95Latency={summary?.p95_latency_ms}
     lossPercent={summary?.loss_percent}
   />
 </div>

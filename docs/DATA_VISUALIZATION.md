@@ -178,6 +178,7 @@ Define tokens in `web/src/styles/tokens/semantic.css`. Override in theme files w
 
 - Window aggregate tier + avg latency + loss %.
 - Status color via `data-status` + `--color-status-*` tokens. Do not use chart accent for tier semantics.
+- Per-stat left accent via `data-quality` on each stat row (`latencyQuality`, `lossQuality` in `status.ts`); same indicator style as live metrics.
 - Missing values: em dash (`—`) via `formatMs` / inline equivalent.
 
 ### Live metrics
@@ -185,6 +186,7 @@ Define tokens in `web/src/styles/tokens/semantic.css`. Override in theme files w
 - Fixed 60 s scope; rolling averages over all samples in the window (latency and jitter from successful pings only; loss over all pings).
 - Refreshes on every ping via `GET /api/live` (triggered from SSE `sample` events).
 - Scalars: avg latency, avg jitter, packet loss; in vertical and ultrawide layouts the live card also shows min/max latency, min/max jitter, and lost packet count. No sparklines unless this doc is extended.
+- Per-metric left accent via `data-quality` on each metric tile (primary values only; min/max detail rows stay neutral).
 
 ### Number formatting
 

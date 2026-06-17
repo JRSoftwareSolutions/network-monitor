@@ -4,7 +4,10 @@ import {
   connectionState,
   DEFAULT_THRESHOLDS,
   formatCount,
+  jitterQuality,
+  latencyQuality,
   lostPackets,
+  lossQuality,
   tierLabel,
 } from "./status";
 
@@ -51,6 +54,46 @@ describe("status", () => {
     expect(lostPackets(10, 8)).toBe(2);
     expect(lostPackets(5, 5)).toBe(0);
     expect(lostPackets(undefined, 0)).toBeUndefined();
+  });
+
+  describe("metric quality", () => {
+    const th = DEFAULT_THRESHOLDS;
+
+    it("returns unknown for missing values", () => {
+      expect(latencyQuality(undefined, th)).toBe("unknown");
+      expect(jitterQuality(null, th)).toBe("unknown");
+      expect(lossQuality(undefined, th)).toBe("unknown");
+    });
+
+    it("classifies latency at threshold boundaries", () => {
+      expect(latencyQuality(th.ping_great, th)).toBe("great");
+      expect(latencyQuality(th.ping_great + 0.1, th)).toBe("ok");
+      expect(latencyQuality(th.ping_good, th)).toBe("ok");
+      expect(latencyQuality(th.ping_good + 0.1, th)).toBe("poor");
+      expect(latencyQuality(th.ping_max, th)).toBe("poor");
+      expect(latencyQuality(th.ping_max + 1, th)).toBe("poor");
+    });
+
+    it("classifies jitter at threshold boundaries", () => {
+      expect(jitterQuality(th.jitter_great, th)).toBe("great");
+      expect(jitterQuality(th.jitter_good, th)).toBe("ok");
+      expect(jitterQuality(th.jitter_max, th)).toBe("poor");
+      expect(jitterQuality(th.jitter_max + 1, th)).toBe("poor");
+    });
+
+    it("classifies loss at threshold boundaries", () => {
+      expect(lossQuality(0, th)).toBe("great");
+      expect(lossQuality(th.loss_good, th)).toBe("ok");
+      expect(lossQuality(th.loss_good + 0.1, th)).toBe("poor");
+      expect(lossQuality(th.loss_max - 0.1, th)).toBe("poor");
+      expect(lossQuality(th.loss_max, th)).toBe("offline");
+    });
+
+    it("allows mixed quality across metrics", () => {
+      expect(lossQuality(0, th)).toBe("great");
+      expect(latencyQuality(35, th)).toBe("great");
+      expect(jitterQuality(28, th)).toBe("poor");
+    });
   });
 
   describe("connectionQualityPercent", () => {
@@ -167,6 +210,61 @@ describe("status", () => {
         th,
       );
       expect(high).toBeGreaterThan(low);
+    });
+
+    it("scores spiky connections worse when P95 exceeds avg", () => {
+      const base = {
+        sample_count: 10,
+        success_count: 10,
+        loss_percent: 0,
+        avg_latency_ms: 20,
+        avg_jitter_ms: 3,
+      };
+      const avgOnly = connectionQualityPercent(base, th);
+      const spiky = connectionQualityPercent({ ...base, p95_latency_ms: 150 }, th);
+      expect(avgOnly).toBe(0);
+      expect(spiky).toBe(69);
+      expect(spiky).toBeGreaterThan(avgOnly);
+    });
+
+    it("falls back to avg when P95 is missing", () => {
+      const summary = {
+        sample_count: 10,
+        success_count: 10,
+        loss_percent: 0,
+        avg_latency_ms: 60,
+        avg_jitter_ms: 10,
+      };
+      expect(connectionQualityPercent(summary, th)).toBe(
+        connectionQualityPercent({ ...summary, p95_latency_ms: 60 }, th),
+      );
+    });
+
+    it("uses worst-of avg and P95 when both are elevated", () => {
+      const avgOnly = connectionQualityPercent(
+        {
+          sample_count: 10,
+          success_count: 10,
+          loss_percent: 0,
+          avg_latency_ms: 120,
+          avg_jitter_ms: 3,
+        },
+        th,
+      );
+      const withHigherP95 = connectionQualityPercent(
+        {
+          sample_count: 10,
+          success_count: 10,
+          loss_percent: 0,
+          avg_latency_ms: 120,
+          p95_latency_ms: 150,
+          avg_jitter_ms: 3,
+        },
+        th,
+      );
+      expect(withHigherP95).toBeGreaterThan(avgOnly);
+      expect(avgOnly).toBe(50);
+      expect(withHigherP95).toBe(69);
     });
   });
 });

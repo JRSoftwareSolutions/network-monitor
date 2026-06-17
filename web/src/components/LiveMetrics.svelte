@@ -1,8 +1,20 @@
 <script lang="ts">
-  import { formatCount, formatMs, formatPercent, lostPackets } from "../lib/status";
+  import type { Thresholds } from "../lib/api";
+  import {
+    DEFAULT_THRESHOLDS,
+    formatCount,
+    formatMs,
+    formatPercent,
+    jitterQuality,
+    latencyQuality,
+    lostPackets,
+    lossQuality,
+    type MetricQuality,
+  } from "../lib/status";
 
   let {
     title = "Live (60s)",
+    thresholds = DEFAULT_THRESHOLDS,
     latency,
     minLatency,
     maxLatency,
@@ -14,6 +26,7 @@
     successCount,
   }: {
     title?: string;
+    thresholds?: Thresholds;
     latency?: number;
     minLatency?: number;
     maxLatency?: number;
@@ -26,12 +39,27 @@
   } = $props();
 
   const lost = $derived(lostPackets(sampleCount, successCount));
+  const offline = $derived(sampleCount === 0 || successCount === 0);
+
+  function liveQuality(
+    value: number | null | undefined,
+    classify: (v: number | null | undefined, t: Thresholds) => MetricQuality,
+  ): MetricQuality {
+    if (offline) {
+      return "offline";
+    }
+    return classify(value, thresholds);
+  }
+
+  const latencyQualityTier = $derived(liveQuality(latency, latencyQuality));
+  const jitterQualityTier = $derived(liveQuality(jitter, jitterQuality));
+  const lossQualityTier = $derived(liveQuality(lossPercent, lossQuality));
 </script>
 
 <section class="card live-card dashboard-panel">
   <h2>{title}</h2>
   <div class="metrics-grid layout-metrics-grid">
-    <div class="metric-tile">
+    <div class="metric-tile quality-indicated" data-quality={latencyQualityTier}>
       <div class="metric-primary">
         <span class="stat-label">Avg latency</span>
         <span class="stat-value">{formatMs(latency)}</span>
@@ -47,7 +75,7 @@
         </div>
       </div>
     </div>
-    <div class="metric-tile">
+    <div class="metric-tile quality-indicated" data-quality={jitterQualityTier}>
       <div class="metric-primary">
         <span class="stat-label">Avg jitter</span>
         <span class="stat-value">{formatMs(jitter)}</span>
@@ -63,7 +91,7 @@
         </div>
       </div>
     </div>
-    <div class="metric-tile">
+    <div class="metric-tile quality-indicated" data-quality={lossQualityTier}>
       <div class="metric-primary">
         <span class="stat-label">Packet loss</span>
         <span class="stat-value">{formatPercent(lossPercent)}</span>
@@ -100,6 +128,10 @@
     border: 1px solid var(--color-border);
     border-radius: var(--radius-md);
     padding: var(--space-3) var(--space-4);
+  }
+
+  .metric-tile.quality-indicated {
+    padding-left: calc(var(--space-3) + 3px + var(--space-3));
   }
 
   .metric-primary {

@@ -58,7 +58,7 @@
   --layout-panel-chart-row: 2 / 3;
   --layout-metrics-columns: repeat(3, minmax(0, 1fr));
   --layout-metrics-detail-display: none;
-  --layout-stat-columns: repeat(2, minmax(0, 1fr));
+  --layout-stat-columns: repeat(3, minmax(0, 1fr));
 
   /* overlays */
   --overlay-bg: rgba(2, 6, 23, 0.65);

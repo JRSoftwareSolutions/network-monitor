@@ -28,6 +28,38 @@ test("live metrics update over time", async ({ page }) => {
   await expect(pill).toHaveAttribute("data-state", /online|stale/, { timeout: 8000 });
 });
 
+test("connection card shows avg and P95 latency", async ({ page }) => {
+  await page.goto("/");
+  const connectionCard = page.locator(".connection-status");
+  await expect(connectionCard).toBeVisible();
+  await expect(connectionCard.getByText("Avg latency")).toBeVisible();
+  await expect(connectionCard.getByText("P95 latency")).toBeVisible();
+  await expect(connectionCard.getByText("Packet loss")).toBeVisible();
+});
+
+test("metric quality indicators on connection and live cards", async ({ page }) => {
+  await page.goto("/");
+  const connectionCard = page.locator(".connection-status");
+  const liveCard = page.locator("section.card", {
+    has: page.getByRole("heading", { name: "Live (60s)" }),
+  });
+  const qualityPattern = /^(great|ok|poor|offline)$/;
+
+  await expect(connectionCard.locator(".quality-indicated")).toHaveCount(3);
+  await expect(liveCard.locator(".metric-tile.quality-indicated")).toHaveCount(3);
+
+  await expect(connectionCard.locator(".quality-indicated").first()).toHaveAttribute(
+    "data-quality",
+    qualityPattern,
+    { timeout: 8000 },
+  );
+  await expect(liveCard.locator(".metric-tile.quality-indicated").first()).toHaveAttribute(
+    "data-quality",
+    qualityPattern,
+    { timeout: 8000 },
+  );
+});
+
 test("window dropdown updates rolling scope labels", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Connection (30 min)" })).toBeVisible();

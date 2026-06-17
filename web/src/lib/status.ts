@@ -1,6 +1,7 @@
 import type { Summary, Thresholds } from "./api";
 
 export type StatusTier = Summary["status"];
+export type MetricQuality = "great" | "ok" | "poor" | "offline" | "unknown";
 
 export const DEFAULT_THRESHOLDS: Thresholds = {
   ping_great: 40,
@@ -18,7 +19,12 @@ export const DEFAULT_THRESHOLDS: Thresholds = {
 
 export type QualitySummary = Pick<
   Summary,
-  "sample_count" | "success_count" | "loss_percent" | "avg_latency_ms" | "avg_jitter_ms"
+  | "sample_count"
+  | "success_count"
+  | "loss_percent"
+  | "avg_latency_ms"
+  | "p95_latency_ms"
+  | "avg_jitter_ms"
 >;
 
 export const COLLECTOR_STALE_INTERVALS = 3;
@@ -48,6 +54,70 @@ function normalize(value: number, good: number, bad: number): number {
   return clamp((value - good) / (bad - good), 0, 1);
 }
 
+function latencyOrJitterQuality(
+  ms: number | null | undefined,
+  great: number,
+  good: number,
+  max: number,
+): MetricQuality {
+  if (ms == null) {
+    return "unknown";
+  }
+  if (ms <= great) {
+    return "great";
+  }
+  if (ms <= good) {
+    return "ok";
+  }
+  if (ms <= max) {
+    return "poor";
+  }
+  return "poor";
+}
+
+export function latencyQuality(
+  ms: number | null | undefined,
+  thresholds: Thresholds,
+): MetricQuality {
+  return latencyOrJitterQuality(
+    ms,
+    thresholds.ping_great,
+    thresholds.ping_good,
+    thresholds.ping_max,
+  );
+}
+
+export function jitterQuality(
+  ms: number | null | undefined,
+  thresholds: Thresholds,
+): MetricQuality {
+  return latencyOrJitterQuality(
+    ms,
+    thresholds.jitter_great,
+    thresholds.jitter_good,
+    thresholds.jitter_max,
+  );
+}
+
+export function lossQuality(
+  percent: number | null | undefined,
+  thresholds: Thresholds,
+): MetricQuality {
+  if (percent == null) {
+    return "unknown";
+  }
+  if (percent >= thresholds.loss_max) {
+    return "offline";
+  }
+  if (percent <= 0) {
+    return "great";
+  }
+  if (percent <= thresholds.loss_good) {
+    return "ok";
+  }
+  return "poor";
+}
+
 export function connectionQualityPercent(
   summary: QualitySummary | null | undefined,
   thresholds: Thresholds,
@@ -59,10 +129,14 @@ export function connectionQualityPercent(
     return 100;
   }
 
-  const ping = summary.avg_latency_ms ?? thresholds.ping_max;
+  const avgPing = summary.avg_latency_ms ?? thresholds.ping_max;
+  const peakPing = summary.p95_latency_ms ?? avgPing;
   const jitter = summary.avg_jitter_ms ?? thresholds.jitter_max;
 
-  const pingNorm = normalize(ping, thresholds.ping_great, thresholds.ping_max);
+  const pingNorm = Math.max(
+    normalize(avgPing, thresholds.ping_great, thresholds.ping_max),
+    normalize(peakPing, thresholds.ping_great, thresholds.ping_max),
+  );
   const jitterNorm = normalize(jitter, thresholds.jitter_great, thresholds.jitter_max);
   const lossNorm = normalize(summary.loss_percent, 0, thresholds.loss_max);
 
