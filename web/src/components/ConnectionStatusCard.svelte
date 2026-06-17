@@ -37,7 +37,7 @@
   });
 </script>
 
-<div class="connection-status">
+<div class="dashboard-panel connection-status">
   <StatusCard
     title={DASHBOARD_METRICS.connection.title(windowMinutes)}
     status={summary?.status ?? "offline"}
@@ -46,10 +46,3 @@
     lossPercent={summary?.loss_percent}
   />
 </div>
-
-<style>
-  .connection-status {
-    grid-area: connection;
-    contain: layout style;
-  }
-</style>

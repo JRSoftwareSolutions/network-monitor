@@ -70,6 +70,8 @@ test("latency chart container present after window change", async ({ page }) => 
 });
 
 test.describe("layout modes", () => {
+  const ALIGN_TOLERANCE = 2;
+
   const connection = (page: import("@playwright/test").Page) => page.locator(".connection-status");
   const live = (page: import("@playwright/test").Page) =>
     page.locator("section.card", {
@@ -77,16 +79,26 @@ test.describe("layout modes", () => {
     });
   const chart = (page: import("@playwright/test").Page) => page.locator(".chart-span");
 
+  function expectAligned(a: number, b: number) {
+    expect(Math.abs(a - b)).toBeLessThanOrEqual(ALIGN_TOLERANCE);
+  }
+
   test("vertical: cards stack above chart", async ({ page }) => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/");
     await expect(page.getByRole("heading", { name: "Network Monitor" })).toBeVisible();
 
     const connBox = await connection(page).boundingBox();
+    const liveBox = await live(page).boundingBox();
     const chartBox = await chart(page).boundingBox();
     expect(connBox).not.toBeNull();
+    expect(liveBox).not.toBeNull();
     expect(chartBox).not.toBeNull();
     expect(chartBox!.y).toBeGreaterThan(connBox!.y);
+    expectAligned(connBox!.x, liveBox!.x);
+    expectAligned(connBox!.x, chartBox!.x);
+    expectAligned(connBox!.width, liveBox!.width);
+    expectAligned(connBox!.width, chartBox!.width);
   });
 
   test("normal: connection and live side by side", async ({ page }) => {
@@ -96,10 +108,17 @@ test.describe("layout modes", () => {
 
     const connBox = await connection(page).boundingBox();
     const liveBox = await live(page).boundingBox();
+    const chartBox = await chart(page).boundingBox();
     expect(connBox).not.toBeNull();
     expect(liveBox).not.toBeNull();
-    expect(Math.abs(connBox!.y - liveBox!.y)).toBeLessThan(40);
+    expect(chartBox).not.toBeNull();
+    expectAligned(connBox!.y, liveBox!.y);
     expect(connBox!.x).toBeLessThan(liveBox!.x);
+    const colGap = liveBox!.x - (connBox!.x + connBox!.width);
+    expect(colGap).toBeGreaterThan(0);
+    expect(colGap).toBeLessThan(20);
+    expectAligned(chartBox!.x, connBox!.x);
+    expect(chartBox!.y).toBeGreaterThan(connBox!.y);
   });
 
   test("ultrawide: chart beside connection cards", async ({ page }) => {
@@ -108,11 +127,19 @@ test.describe("layout modes", () => {
     await expect(page.getByRole("heading", { name: "Network Monitor" })).toBeVisible();
 
     const connBox = await connection(page).boundingBox();
+    const liveBox = await live(page).boundingBox();
     const chartBox = await chart(page).boundingBox();
     expect(connBox).not.toBeNull();
+    expect(liveBox).not.toBeNull();
     expect(chartBox).not.toBeNull();
     expect(chartBox!.x).toBeGreaterThan(connBox!.x);
-    expect(chartBox!.height).toBeGreaterThan(connBox!.height);
+    expectAligned(connBox!.y, chartBox!.y);
+    expectAligned(liveBox!.y + liveBox!.height, chartBox!.y + chartBox!.height);
+    const rowGap = liveBox!.y - (connBox!.y + connBox!.height);
+    expect(rowGap).toBeGreaterThan(0);
+    expect(rowGap).toBeLessThan(20);
+    expectAligned(connBox!.x, liveBox!.x);
+    expectAligned(connBox!.width, liveBox!.width);
   });
 
   test("ultrawide: layout stable when window height changes", async ({ page }) => {
@@ -135,11 +162,14 @@ test.describe("layout modes", () => {
     await expect(page.getByRole("heading", { name: "Network Monitor" })).toBeVisible();
 
     const connBox = await connection(page).boundingBox();
+    const liveBox = await live(page).boundingBox();
     const chartBox = await chart(page).boundingBox();
     expect(connBox).not.toBeNull();
+    expect(liveBox).not.toBeNull();
     expect(chartBox).not.toBeNull();
     expect(chartBox!.y).toBeGreaterThan(connBox!.y);
-    expect(Math.abs(chartBox!.x - connBox!.x)).toBeLessThan(40);
+    expectAligned(chartBox!.x, connBox!.x);
+    expectAligned(chartBox!.x + chartBox!.width, liveBox!.x + liveBox!.width);
   });
 
   test("vertical: live metric detail stats visible", async ({ page }) => {

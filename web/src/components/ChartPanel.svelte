@@ -66,7 +66,7 @@
   });
 </script>
 
-<div class="chart-span">
+<div class="dashboard-panel chart-span">
   <LatencyChart
     title={DASHBOARD_METRICS.latencyChart.title(windowMinutes)}
     buckets={chartBuckets}
@@ -76,10 +76,3 @@
     viewportMs={chartViewportMs}
   />
 </div>
-
-<style>
-  .chart-span {
-    grid-area: chart;
-    contain: layout style;
-  }
-</style>
