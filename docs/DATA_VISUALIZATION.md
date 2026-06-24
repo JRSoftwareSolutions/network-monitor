@@ -55,6 +55,7 @@ Align with `web/src/lib/windows.ts`:
 |---------|-------|---------------|
 | `connection` | rolling | User dropdown (5/15/30/60/120 min) |
 | `latencyChart` | rolling | User dropdown |
+| `jitterChart` | rolling | User dropdown |
 | `live` | fixed | Always 60 s (`LIVE_WINDOW_SECONDS`) |
 
 - Rolling charts use X-axis `[viewport − window, viewport]` via `xScaleBounds` in `charts.ts`. `viewport` advances only on chart refresh (bin finalized, bootstrap, window change, reconnect).
@@ -96,12 +97,15 @@ Go: `metrics.DisplayBucketSeconds`. TypeScript: `displayBucketSeconds` in `web/s
 | Field | JSON | Use |
 |-------|------|-----|
 | Timestamp | `ts` | **Bucket center** (RFC3339 UTC) |
-| Average | `avg_ms` | Primary line series |
-| Minimum | `min_ms` | Range band lower bound |
-| Maximum | `max_ms` | Range band upper bound |
+| Average | `avg_ms` | Primary line series (latency chart) |
+| Minimum | `min_ms` | Range band lower bound (latency chart) |
+| Maximum | `max_ms` | Range band upper bound (latency chart) |
+| Jitter average | `avg_jitter_ms` | Primary line series (jitter chart) |
+| Jitter minimum | `min_jitter_ms` | Range band lower bound (jitter chart) |
+| Jitter maximum | `max_jitter_ms` | Range band upper bound (jitter chart) |
 | Count | `sample_count` | Weighted merge on SSE append |
 
-Failed pings are excluded from min/max/avg. If an entire bucket has no successful pings, emit `null` for all three latency fields.
+Failed pings are excluded from min/max/avg. If an entire bucket has no successful pings, emit `null` for latency and jitter stat fields.
 
 ### Layer placement
 
@@ -111,8 +115,8 @@ Failed pings are excluded from min/max/avg. If an entire bucket has no successfu
 | Server aggregation | `internal/metrics/buckets.go` — `AggregateBuckets` |
 | HTTP response | `internal/api/handlers.go` — `Samples` handler |
 | Client buffer + SSE ingest | `web/src/lib/charts.ts` — `ChartBuffer`, `ingestSample`, `displayBuckets`, `hydrateChartBuffer` |
-| uPlot config + range bands | `web/src/lib/charts.ts` — `createLatencyChart` |
-| DOM mount / resize | `web/src/components/LatencyChart.svelte` |
+| uPlot config + range bands | `web/src/lib/charts.ts` — `createLatencyChart`, `createJitterChart` |
+| DOM mount / resize | `web/src/components/LatencyChart.svelte`, `JitterChart.svelte` |
 
 **Rule:** Components do not aggregate. Pure functions in `charts.ts` / `metrics` only.
 

@@ -80,3 +80,58 @@ func TestStoreInsertQueryPrune(t *testing.T) {
 		t.Fatalf("after prune samples=%d", len(samples))
 	}
 }
+
+func TestStoreSpeedTestResults(t *testing.T) {
+	dir := t.TempDir()
+	st, err := Open(filepath.Join(dir, "monitor.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	dl := 842.15
+	ul := 312.47
+	ts := time.Now().UTC().Format(time.RFC3339Nano)
+	if err := st.InsertSpeedTestResult(SpeedTestResult{
+		TS:              ts,
+		DownloadMbps:    &dl,
+		UploadMbps:      &ul,
+		DurationSeconds: 10,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := st.QuerySpeedTestResults(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("results=%d", len(results))
+	}
+	if results[0].DownloadMbps == nil || *results[0].DownloadMbps != dl {
+		t.Fatalf("download=%v", results[0].DownloadMbps)
+	}
+	if results[0].UploadMbps == nil || *results[0].UploadMbps != ul {
+		t.Fatalf("upload=%v", results[0].UploadMbps)
+	}
+
+	oldTS := time.Now().Add(-2 * time.Hour).UTC().Format(time.RFC3339Nano)
+	oldDl := 10.0
+	if err := st.InsertSpeedTestResult(SpeedTestResult{
+		TS:              oldTS,
+		DownloadMbps:    &oldDl,
+		DurationSeconds: 10,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.Prune(time.Now().Add(-time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	results, err = st.QuerySpeedTestResults(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 {
+		t.Fatalf("after prune results=%d", len(results))
+	}
+}

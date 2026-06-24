@@ -19,7 +19,7 @@ func NewSSEHub() *SSEHub {
 }
 
 func (h *SSEHub) Subscribe() chan []byte {
-	ch := make(chan []byte, 16)
+	ch := make(chan []byte, 128)
 	h.mu.Lock()
 	h.clients[ch] = struct{}{}
 	h.mu.Unlock()
@@ -46,6 +46,14 @@ func (h *SSEHub) Broadcast(eventType string, data any) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	for ch := range h.clients {
+		if eventType == "speedtest_progress" {
+			select {
+			case ch <- frame:
+			case <-time.After(100 * time.Millisecond):
+				log.Printf("sse: slow client missed speedtest_progress")
+			}
+			continue
+		}
 		select {
 		case ch <- frame:
 		default:
@@ -67,6 +75,17 @@ func (h *SSEHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	ch := h.Subscribe()
 	defer h.Unsubscribe(ch)
+
+	remote := clientAddr(r)
+	connectedAt := time.Now()
+	logAction("sse client connected remote=%s", remote)
+	defer func() {
+		logAction(
+			"sse client disconnected remote=%s duration=%s",
+			remote,
+			time.Since(connectedAt).Round(time.Millisecond),
+		)
+	}()
 
 	fmt.Fprintf(w, "data: %s\n\n", `{"type":"connected","data":{}}`)
 	flusher.Flush()

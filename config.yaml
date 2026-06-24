@@ -16,3 +16,15 @@ thresholds:
     loss_good: 1
     loss_okay: 3
     loss_max: 15
+speedtest:
+    servers:
+        - https://speedtest.selectel.ru/
+        - https://nyc.speedtest.clouvider.net/backend/
+        - https://fra.speedtest.clouvider.net/backend/
+        - https://speedtest.singapore.linode.com/
+    download_path: ""
+    upload_path: ""
+    download_url: ""
+    upload_url: ""
+    duration_seconds: 10
+    parallel_streams: 8

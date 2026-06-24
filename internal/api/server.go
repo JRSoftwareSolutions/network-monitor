@@ -37,6 +37,8 @@ func NewServer(cfgHost string, cfgPort int, handlers *Handlers, sse *SSEHub) *Se
 	mux.HandleFunc("/api/summary", handlers.Summary)
 	mux.HandleFunc("/api/samples", handlers.Samples)
 	mux.HandleFunc("/api/live", handlers.Live)
+	mux.HandleFunc("/api/speedtest", handlers.SpeedTest)
+	mux.HandleFunc("/api/speedtest/results", handlers.SpeedTestResults)
 	mux.Handle("/api/events", sse)
 
 	staticFS, err := fs.Sub(webDist, "dist")
@@ -89,7 +91,7 @@ func spaHandler(staticFS fs.FS, fileServer http.Handler) http.Handler {
 func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, PUT, POST, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Config-Token")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

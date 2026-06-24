@@ -14,6 +14,9 @@ type ChartBucket struct {
 	AvgMs       *float64 `json:"avg_ms,omitempty"`
 	MinMs       *float64 `json:"min_ms,omitempty"`
 	MaxMs       *float64 `json:"max_ms,omitempty"`
+	AvgJitterMs *float64 `json:"avg_jitter_ms,omitempty"`
+	MinJitterMs *float64 `json:"min_jitter_ms,omitempty"`
+	MaxJitterMs *float64 `json:"max_jitter_ms,omitempty"`
 	SampleCount int      `json:"sample_count"`
 }
 
@@ -51,12 +54,17 @@ func AggregateBuckets(samples []store.Sample, windowStart time.Time, bucketSecon
 	}
 
 	type acc struct {
-		total   int
-		success int
-		sum     float64
-		min     float64
-		max     float64
-		has     bool
+		total       int
+		success     int
+		sum         float64
+		min         float64
+		max         float64
+		has         bool
+		jitterSum   float64
+		jitterMin   float64
+		jitterMax   float64
+		jitterCount int
+		jitterHas   bool
 	}
 	accs := make(map[int64]acc)
 
@@ -89,6 +97,23 @@ func AggregateBuckets(samples []store.Sample, windowStart time.Time, bucketSecon
 			a.sum += v
 			a.success++
 		}
+		if s.Success && s.JitterMs != nil {
+			jv := *s.JitterMs
+			if !a.jitterHas {
+				a.jitterMin = jv
+				a.jitterMax = jv
+				a.jitterHas = true
+			} else {
+				if jv < a.jitterMin {
+					a.jitterMin = jv
+				}
+				if jv > a.jitterMax {
+					a.jitterMax = jv
+				}
+			}
+			a.jitterSum += jv
+			a.jitterCount++
+		}
 		accs[key] = a
 	}
 
@@ -115,6 +140,14 @@ func AggregateBuckets(samples []store.Sample, windowStart time.Time, bucketSecon
 			b.MinMs = ptr(minV)
 			b.MaxMs = ptr(maxV)
 		}
+		if a.jitterHas {
+			jAvg := round2(a.jitterSum / float64(a.jitterCount))
+			jMin := round2(a.jitterMin)
+			jMax := round2(a.jitterMax)
+			b.AvgJitterMs = ptr(jAvg)
+			b.MinJitterMs = ptr(jMin)
+			b.MaxJitterMs = ptr(jMax)
+		}
 		out = append(out, b)
 	}
 	return out
@@ -129,6 +162,12 @@ func samplesToBuckets(samples []store.Sample) []ChartBucket {
 			b.AvgMs = ptr(v)
 			b.MinMs = ptr(v)
 			b.MaxMs = ptr(v)
+		}
+		if s.Success && s.JitterMs != nil {
+			jv := round2(*s.JitterMs)
+			b.AvgJitterMs = ptr(jv)
+			b.MinJitterMs = ptr(jv)
+			b.MaxJitterMs = ptr(jv)
 		}
 		out[i] = b
 	}

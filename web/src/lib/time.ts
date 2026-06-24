@@ -20,3 +20,17 @@ export function filterBucketsByWindow(
   });
   return removed ? filtered : buckets;
 }
+
+/** Short local time for history rows (e.g. speed test results). */
+export function formatShortTime(ts: string): string {
+  const ms = parseTs(ts);
+  if (Number.isNaN(ms)) {
+    return "—";
+  }
+  return new Date(ms).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+}

@@ -18,7 +18,9 @@
     var(--color-status-offline)
   );
   --color-quality-needle: color-mix(in srgb, var(--color-text) 70%, var(--color-text-muted));
+  --color-chart-series: var(--color-accent);
   --color-chart-envelope: var(--palette-slate-500);
   --color-chart-envelope-fill: color-mix(in srgb, var(--palette-sky-400) 12%, transparent);
+  --chart-line-width: 1;
   --gradient-bg-top: var(--palette-blue-950);
 }

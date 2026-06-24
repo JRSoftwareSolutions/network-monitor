@@ -15,6 +15,7 @@ import (
 	"network-monitor/internal/api"
 	"network-monitor/internal/collector"
 	"network-monitor/internal/config"
+	"network-monitor/internal/speedtest"
 	"network-monitor/internal/store"
 )
 
@@ -43,7 +44,8 @@ func main() {
 
 	startedAt := time.Now()
 	sse := api.NewSSEHub()
-	handlers := api.NewHandlers(cfgMgr, st, sse, startedAt)
+	speedRunner := speedtest.NewRunner()
+	handlers := api.NewHandlers(cfgMgr, st, sse, speedRunner, startedAt)
 
 	col := collector.New(cfgMgr, st, func(sample store.Sample) {
 		sse.Broadcast("sample", sample)
@@ -65,6 +67,7 @@ func main() {
 	<-ctx.Done()
 	stop()
 
+	log.Printf("action: monitor shutting down")
 	if err := srv.Shutdown(); err != nil {
 		log.Printf("shutdown: %v", err)
 	}

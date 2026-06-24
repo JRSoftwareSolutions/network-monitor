@@ -179,6 +179,13 @@ export function formatPercent(value?: number | null): string {
   return `${value.toFixed(1)}%`;
 }
 
+export function formatMbps(value?: number | null): string {
+  if (value == null) {
+    return "—";
+  }
+  return `${value.toFixed(1)} Mbps`;
+}
+
 export function formatCount(value?: number | null): string {
   if (value == null) {
     return "—";

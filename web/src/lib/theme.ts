@@ -29,8 +29,12 @@ export function chartHeight(el?: Element): number {
 
 export function chartTheme(el?: Element) {
   const themeEl = el ?? root();
+  const seriesStroke =
+    cssVar("--color-chart-series", themeEl) || cssVar("--color-accent", themeEl);
+  const lineWidth = parseFloat(cssVar("--chart-line-width", themeEl)) || 1;
   return {
-    seriesStroke: cssVar("--color-accent", themeEl),
+    seriesStroke,
+    lineWidth,
     axisStroke: cssVar("--color-text-muted", themeEl),
     envelopeStroke: cssVar("--color-chart-envelope", themeEl),
     envelopeFill: cssVar("--color-chart-envelope-fill", themeEl),

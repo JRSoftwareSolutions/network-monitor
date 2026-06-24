@@ -45,36 +45,70 @@ export function bucketCenterMs(binStartMs: number, bucketSeconds: number): numbe
   return binStartMs + (bucketSeconds * 1000) / 2;
 }
 
+function mergeNumericField(
+  aVal: number | null | undefined,
+  aCount: number,
+  bVal: number | null | undefined,
+  bCount: number,
+  combine: "min" | "max" | "avg",
+): number | null {
+  if (combine === "min") {
+    let min: number | null = aVal ?? null;
+    if (bVal != null) {
+      min = min == null ? bVal : Math.min(min, bVal);
+    }
+    return min;
+  }
+  if (combine === "max") {
+    let max: number | null = aVal ?? null;
+    if (bVal != null) {
+      max = max == null ? bVal : Math.max(max, bVal);
+    }
+    return max;
+  }
+  let numer = 0;
+  let denom = 0;
+  if (aVal != null) {
+    numer += aVal * aCount;
+    denom += aCount;
+  }
+  if (bVal != null) {
+    numer += bVal * bCount;
+    denom += bCount;
+  }
+  return denom > 0 ? numer / denom : null;
+}
+
 export function mergeChartBuckets(a: ChartBucket, b: ChartBucket): ChartBucket {
   const sampleCount = a.sample_count + b.sample_count;
-
-  let minMs: number | null = a.min_ms ?? null;
-  if (b.min_ms != null) {
-    minMs = minMs == null ? b.min_ms : Math.min(minMs, b.min_ms);
-  }
-
-  let maxMs: number | null = a.max_ms ?? null;
-  if (b.max_ms != null) {
-    maxMs = maxMs == null ? b.max_ms : Math.max(maxMs, b.max_ms);
-  }
-
-  let avgNumer = 0;
-  let avgDenom = 0;
-  if (a.avg_ms != null) {
-    avgNumer += a.avg_ms * a.sample_count;
-    avgDenom += a.sample_count;
-  }
-  if (b.avg_ms != null) {
-    avgNumer += b.avg_ms * b.sample_count;
-    avgDenom += b.sample_count;
-  }
 
   return {
     ts: a.ts,
     sample_count: sampleCount,
-    avg_ms: avgDenom > 0 ? avgNumer / avgDenom : null,
-    min_ms: minMs,
-    max_ms: maxMs,
+    min_ms: mergeNumericField(a.min_ms, a.sample_count, b.min_ms, b.sample_count, "min"),
+    max_ms: mergeNumericField(a.max_ms, a.sample_count, b.max_ms, b.sample_count, "max"),
+    avg_ms: mergeNumericField(a.avg_ms, a.sample_count, b.avg_ms, b.sample_count, "avg"),
+    min_jitter_ms: mergeNumericField(
+      a.min_jitter_ms,
+      a.sample_count,
+      b.min_jitter_ms,
+      b.sample_count,
+      "min",
+    ),
+    max_jitter_ms: mergeNumericField(
+      a.max_jitter_ms,
+      a.sample_count,
+      b.max_jitter_ms,
+      b.sample_count,
+      "max",
+    ),
+    avg_jitter_ms: mergeNumericField(
+      a.avg_jitter_ms,
+      a.sample_count,
+      b.avg_jitter_ms,
+      b.sample_count,
+      "avg",
+    ),
   };
 }
 
@@ -84,6 +118,11 @@ export function sampleToBucket(sample: Sample): ChartBucket {
     bucket.avg_ms = sample.latency_ms;
     bucket.min_ms = sample.latency_ms;
     bucket.max_ms = sample.latency_ms;
+  }
+  if (sample.success && sample.jitter_ms != null) {
+    bucket.avg_jitter_ms = sample.jitter_ms;
+    bucket.min_jitter_ms = sample.jitter_ms;
+    bucket.max_jitter_ms = sample.jitter_ms;
   }
   return bucket;
 }
@@ -207,15 +246,32 @@ export function buildLatencySeries(buckets: ChartBucket[]): {
   return { times, max, min, avg };
 }
 
-export function latencySeriesEqual(
+export function buildJitterSeries(buckets: ChartBucket[]): {
+  times: number[];
+  max: (number | null)[];
+  min: (number | null)[];
+  avg: (number | null)[];
+} {
+  const times: number[] = [];
+  const max: (number | null)[] = [];
+  const min: (number | null)[] = [];
+  const avg: (number | null)[] = [];
+
+  for (const b of buckets) {
+    times.push(parseTs(b.ts) / 1000);
+    max.push(b.max_jitter_ms ?? null);
+    min.push(b.min_jitter_ms ?? null);
+    avg.push(b.avg_jitter_ms ?? null);
+  }
+
+  return { times, max, min, avg };
+}
+
+export function jitterSeriesEqual(
   a: { times: number[]; avg: (number | null)[] },
   b: { times: number[]; avg: (number | null)[] },
 ): boolean {
-  if (a.times.length !== b.times.length) return false;
-  for (let i = 0; i < a.times.length; i++) {
-    if (a.times[i] !== b.times[i] || a.avg[i] !== b.avg[i]) return false;
-  }
-  return true;
+  return latencySeriesEqual(a, b);
 }
 
 function bucketHalfWidthPx(u: uPlot, times: number[], i: number, bucketSeconds: number): number {
@@ -294,8 +350,20 @@ function createRangeBandPlugin(): uPlot.Plugin {
   };
 }
 
-export function createLatencyChart(
+export function latencySeriesEqual(
+  a: { times: number[]; avg: (number | null)[] },
+  b: { times: number[]; avg: (number | null)[] },
+): boolean {
+  if (a.times.length !== b.times.length) return false;
+  for (let i = 0; i < a.times.length; i++) {
+    if (a.times[i] !== b.times[i] || a.avg[i] !== b.avg[i]) return false;
+  }
+  return true;
+}
+
+function createMsChart(
   el: HTMLElement,
+  label: string,
   times: number[],
   min: (number | null)[],
   max: (number | null)[],
@@ -313,9 +381,9 @@ export function createLatencyChart(
     series: [
       {},
       {
-        label: "Latency",
+        label,
         stroke: theme.seriesStroke,
-        width: 2,
+        width: theme.lineWidth,
         spanGaps: true,
       },
     ],
@@ -344,7 +412,7 @@ export function createLatencyChart(
   return chart;
 }
 
-export function updateLatencyChartData(
+function updateMsChartData(
   chart: uPlot,
   times: number[],
   min: (number | null)[],
@@ -356,8 +424,48 @@ export function updateLatencyChartData(
   chart.setData([times, avg]);
 }
 
-export function scrollLatencyChart(chart: uPlot, bounds: { min: number; max: number }) {
+function scrollMsChart(chart: uPlot, bounds: { min: number; max: number }) {
   chart.setScale("x", bounds);
+}
+
+function updateMsChart(
+  chart: uPlot,
+  times: number[],
+  min: (number | null)[],
+  max: (number | null)[],
+  avg: (number | null)[],
+  bucketSeconds: number,
+  bounds: { min: number; max: number },
+) {
+  scrollMsChart(chart, bounds);
+  updateMsChartData(chart, times, min, max, avg, bucketSeconds);
+}
+
+export function createLatencyChart(
+  el: HTMLElement,
+  times: number[],
+  min: (number | null)[],
+  max: (number | null)[],
+  avg: (number | null)[],
+  bucketSeconds: number,
+  bounds: { min: number; max: number },
+): uPlot {
+  return createMsChart(el, "Latency", times, min, max, avg, bucketSeconds, bounds);
+}
+
+export function updateLatencyChartData(
+  chart: uPlot,
+  times: number[],
+  min: (number | null)[],
+  max: (number | null)[],
+  avg: (number | null)[],
+  bucketSeconds: number,
+) {
+  updateMsChartData(chart, times, min, max, avg, bucketSeconds);
+}
+
+export function scrollLatencyChart(chart: uPlot, bounds: { min: number; max: number }) {
+  scrollMsChart(chart, bounds);
 }
 
 export function updateLatencyChart(
@@ -369,8 +477,31 @@ export function updateLatencyChart(
   bucketSeconds: number,
   bounds: { min: number; max: number },
 ) {
-  scrollLatencyChart(chart, bounds);
-  updateLatencyChartData(chart, times, min, max, avg, bucketSeconds);
+  updateMsChart(chart, times, min, max, avg, bucketSeconds, bounds);
+}
+
+export function createJitterChart(
+  el: HTMLElement,
+  times: number[],
+  min: (number | null)[],
+  max: (number | null)[],
+  avg: (number | null)[],
+  bucketSeconds: number,
+  bounds: { min: number; max: number },
+): uPlot {
+  return createMsChart(el, "Jitter", times, min, max, avg, bucketSeconds, bounds);
+}
+
+export function updateJitterChart(
+  chart: uPlot,
+  times: number[],
+  min: (number | null)[],
+  max: (number | null)[],
+  avg: (number | null)[],
+  bucketSeconds: number,
+  bounds: { min: number; max: number },
+) {
+  updateMsChart(chart, times, min, max, avg, bucketSeconds, bounds);
 }
 
 export type ChartLiveSnapshot = {

@@ -2,7 +2,9 @@
   import { onMount, onDestroy } from "svelte";
   import ConnectionStatusCard from "./components/ConnectionStatusCard.svelte";
   import ChartPanel from "./components/ChartPanel.svelte";
+  import JitterChartPanel from "./components/JitterChartPanel.svelte";
   import LiveMetricsCard from "./components/LiveMetricsCard.svelte";
+  import SpeedTestCard from "./components/SpeedTestCard.svelte";
   import ConnectionPill from "./components/ConnectionPill.svelte";
   import SettingsPanel from "./components/SettingsPanel.svelte";
   import {
@@ -10,11 +12,13 @@
     putConfig,
     type AppConfig,
     type Sample,
+    type SpeedTestProgress,
   } from "./lib/api";
   import { SSEClient } from "./lib/sse";
   import { publishChartSample, requestChartReload } from "./lib/chartSample";
   import { adoptConnectionSample } from "./lib/connectionSample";
   import { requestLiveRefresh } from "./lib/liveRefresh";
+  import { publishSpeedTestProgress } from "./lib/speedtestProgress";
   import { loadWindowMinutes, saveWindowMinutes } from "./lib/preferences";
 
   let config = $state<AppConfig | null>(null);
@@ -48,6 +52,9 @@
       if (config) {
         config = { ...config, ...patch };
       }
+    }
+    if (type === "speedtest_progress") {
+      publishSpeedTestProgress(data as SpeedTestProgress);
     }
   }
 
@@ -126,6 +133,8 @@
     <ConnectionStatusCard {windowMinutes} thresholds={config?.thresholds} />
     <LiveMetricsCard thresholds={config?.thresholds} />
     <ChartPanel {windowMinutes} />
+    <SpeedTestCard />
+    <JitterChartPanel {windowMinutes} />
   </main>
 </div>
 </div>

@@ -64,11 +64,13 @@ test("window dropdown updates rolling scope labels", async ({ page }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Connection (30 min)" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Latency (30 min)" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Jitter (30 min)" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Live (60s)" })).toBeVisible();
 
   await page.locator(".window-select select").selectOption("5");
   await expect(page.getByRole("heading", { name: "Connection (5 min)" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Latency (5 min)" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Jitter (5 min)" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Live (60s)" })).toBeVisible();
 });
 
@@ -94,11 +96,22 @@ test("window change keeps connection pill online", async ({ page }) => {
   await expect(pill).toHaveAttribute("data-state", /online|stale/);
 });
 
+test("speed test card is visible", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Speed test" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Run test" })).toBeVisible();
+  const speedTest = page.locator(".speed-test");
+  const metrics = speedTest.locator(".speed-metrics");
+  await expect(metrics.getByText("Download", { exact: true })).toBeVisible();
+  await expect(metrics.getByText("Upload", { exact: true })).toBeVisible();
+});
+
 test("latency chart container present after window change", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator(".chart-wrap")).toBeVisible();
+  const latencyChart = page.locator(".chart-span .chart-wrap");
+  await expect(latencyChart).toBeVisible();
   await page.locator(".window-select select").selectOption("5");
-  await expect(page.locator(".chart-wrap")).toBeVisible();
+  await expect(latencyChart).toBeVisible();
 });
 
 test.describe("layout modes", () => {
@@ -110,6 +123,8 @@ test.describe("layout modes", () => {
       has: page.getByRole("heading", { name: /Live \(60s\)/ }),
     });
   const chart = (page: import("@playwright/test").Page) => page.locator(".chart-span");
+  const speed = (page: import("@playwright/test").Page) => page.locator(".speed-test");
+  const jitter = (page: import("@playwright/test").Page) => page.locator(".jitter-chart-span");
 
   function expectAligned(a: number, b: number) {
     expect(Math.abs(a - b)).toBeLessThanOrEqual(ALIGN_TOLERANCE);
@@ -123,10 +138,16 @@ test.describe("layout modes", () => {
     const connBox = await connection(page).boundingBox();
     const liveBox = await live(page).boundingBox();
     const chartBox = await chart(page).boundingBox();
+    const speedBox = await speed(page).boundingBox();
+    const jitterBox = await jitter(page).boundingBox();
     expect(connBox).not.toBeNull();
     expect(liveBox).not.toBeNull();
     expect(chartBox).not.toBeNull();
+    expect(speedBox).not.toBeNull();
+    expect(jitterBox).not.toBeNull();
     expect(chartBox!.y).toBeGreaterThan(connBox!.y);
+    expect(speedBox!.y).toBeGreaterThan(chartBox!.y);
+    expect(jitterBox!.y).toBeGreaterThan(speedBox!.y);
     expectAligned(connBox!.x, liveBox!.x);
     expectAligned(connBox!.x, chartBox!.x);
     expectAligned(connBox!.width, liveBox!.width);
@@ -141,9 +162,13 @@ test.describe("layout modes", () => {
     const connBox = await connection(page).boundingBox();
     const liveBox = await live(page).boundingBox();
     const chartBox = await chart(page).boundingBox();
+    const speedBox = await speed(page).boundingBox();
+    const jitterBox = await jitter(page).boundingBox();
     expect(connBox).not.toBeNull();
     expect(liveBox).not.toBeNull();
     expect(chartBox).not.toBeNull();
+    expect(speedBox).not.toBeNull();
+    expect(jitterBox).not.toBeNull();
     expectAligned(connBox!.y, liveBox!.y);
     expect(connBox!.x).toBeLessThan(liveBox!.x);
     const colGap = liveBox!.x - (connBox!.x + connBox!.width);
@@ -151,6 +176,9 @@ test.describe("layout modes", () => {
     expect(colGap).toBeLessThan(20);
     expectAligned(chartBox!.x, connBox!.x);
     expect(chartBox!.y).toBeGreaterThan(connBox!.y);
+    expectAligned(speedBox!.y, jitterBox!.y);
+    expect(speedBox!.x).toBeLessThan(jitterBox!.x);
+    expect(speedBox!.y).toBeGreaterThan(chartBox!.y);
   });
 
   test("ultrawide: chart beside connection cards", async ({ page }) => {
@@ -161,17 +189,24 @@ test.describe("layout modes", () => {
     const connBox = await connection(page).boundingBox();
     const liveBox = await live(page).boundingBox();
     const chartBox = await chart(page).boundingBox();
+    const speedBox = await speed(page).boundingBox();
+    const jitterBox = await jitter(page).boundingBox();
     expect(connBox).not.toBeNull();
     expect(liveBox).not.toBeNull();
     expect(chartBox).not.toBeNull();
+    expect(speedBox).not.toBeNull();
+    expect(jitterBox).not.toBeNull();
     expect(chartBox!.x).toBeGreaterThan(connBox!.x);
     expectAligned(connBox!.y, chartBox!.y);
-    expectAligned(liveBox!.y + liveBox!.height, chartBox!.y + chartBox!.height);
+    expect(chartBox!.y + chartBox!.height).toBeLessThan(jitterBox!.y + 4);
     const rowGap = liveBox!.y - (connBox!.y + connBox!.height);
     expect(rowGap).toBeGreaterThan(0);
     expect(rowGap).toBeLessThan(20);
     expectAligned(connBox!.x, liveBox!.x);
     expectAligned(connBox!.width, liveBox!.width);
+    expectAligned(speedBox!.y, jitterBox!.y);
+    expect(speedBox!.x).toBeLessThan(jitterBox!.x);
+    expectAligned(speedBox!.x, connBox!.x);
   });
 
   test("ultrawide: layout stable when window height changes", async ({ page }) => {

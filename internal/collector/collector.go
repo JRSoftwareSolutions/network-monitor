@@ -45,6 +45,14 @@ func (c *Collector) Start() {
 	c.stop = cancel
 	c.mu.Unlock()
 
+	cfg := c.cfgMgr.Get()
+	log.Printf(
+		"action: collector started target=%s ping_interval_seconds=%g retention_minutes=%d",
+		cfg.Target,
+		cfg.PingIntervalSeconds,
+		cfg.RetentionMinutes,
+	)
+
 	c.wg.Add(1)
 	go c.loop(ctx)
 }
@@ -58,6 +66,7 @@ func (c *Collector) Stop() {
 		cancel()
 	}
 	c.wg.Wait()
+	log.Printf("action: collector stopped")
 }
 
 func (c *Collector) loop(ctx context.Context) {
@@ -66,6 +75,7 @@ func (c *Collector) loop(ctx context.Context) {
 	for {
 		cfg := c.cfgMgr.Get()
 		if cfg.Target != c.target {
+			log.Printf("action: collector target changed %s -> %s", c.target, cfg.Target)
 			c.target = cfg.Target
 			c.jitter.Reset()
 		}

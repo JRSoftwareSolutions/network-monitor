@@ -18,6 +18,9 @@ export const DASHBOARD_METRICS = {
   latencyChart: {
     title: (m) => `Latency (${m} min)`,
   },
+  jitterChart: {
+    title: (m) => `Jitter (${m} min)`,
+  },
   live: {
     title: (_m) => `Live (${LIVE_WINDOW_SECONDS}s)`,
   },

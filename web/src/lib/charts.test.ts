@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   bucketCenterMs,
   bucketStartMs,
+  buildJitterSeries,
   buildLatencySeries,
   createChartLiveIngest,
   displayBuckets,
@@ -26,6 +27,32 @@ describe("buildLatencySeries", () => {
     expect(avg).toEqual([15, 25]);
     expect(min).toEqual([10, 22]);
     expect(max).toEqual([20, 30]);
+  });
+});
+
+describe("buildJitterSeries", () => {
+  it("maps jitter bucket fields to chart series", () => {
+    const buckets: ChartBucket[] = [
+      {
+        ts: "2026-06-16T11:59:00.000Z",
+        avg_jitter_ms: 5,
+        min_jitter_ms: 2,
+        max_jitter_ms: 8,
+        sample_count: 3,
+      },
+      {
+        ts: "2026-06-16T11:59:30.000Z",
+        avg_jitter_ms: 12,
+        min_jitter_ms: 10,
+        max_jitter_ms: 15,
+        sample_count: 2,
+      },
+    ];
+    const { times, max, min, avg } = buildJitterSeries(buckets);
+    expect(times).toHaveLength(2);
+    expect(avg).toEqual([5, 12]);
+    expect(min).toEqual([2, 10]);
+    expect(max).toEqual([8, 15]);
   });
 });
 
@@ -61,6 +88,9 @@ describe("mergeChartBuckets", () => {
       avg_ms: 10,
       min_ms: 8,
       max_ms: 12,
+      avg_jitter_ms: 2,
+      min_jitter_ms: 1,
+      max_jitter_ms: 3,
       sample_count: 2,
     };
     const b: ChartBucket = {
@@ -68,6 +98,9 @@ describe("mergeChartBuckets", () => {
       avg_ms: 20,
       min_ms: 15,
       max_ms: 50,
+      avg_jitter_ms: 6,
+      min_jitter_ms: 4,
+      max_jitter_ms: 10,
       sample_count: 3,
     };
     const merged = mergeChartBuckets(a, b);
@@ -75,15 +108,19 @@ describe("mergeChartBuckets", () => {
     expect(merged.max_ms).toBe(50);
     expect(merged.sample_count).toBe(5);
     expect(merged.avg_ms).toBeCloseTo(16);
+    expect(merged.min_jitter_ms).toBe(1);
+    expect(merged.max_jitter_ms).toBe(10);
+    expect(merged.avg_jitter_ms).toBeCloseTo(4.4);
   });
 });
 
 describe("ingestSample", () => {
-  const sample = (ts: string, latency: number): Sample => ({
+  const sample = (ts: string, latency: number, jitter?: number): Sample => ({
     ts,
     host: "1.1.1.1",
     success: true,
     latency_ms: latency,
+    jitter_ms: jitter,
   });
 
   it("accumulates in open bin without finalizing", () => {
@@ -108,6 +145,14 @@ describe("ingestSample", () => {
     expect(crossed.buffer.completed).toHaveLength(1);
     expect(crossed.buffer.completed[0].sample_count).toBe(1);
     expect(crossed.buffer.open?.avg_ms).toBe(20);
+  });
+
+  it("accumulates jitter in open bin", () => {
+    let buffer = emptyChartBuffer();
+    buffer = ingestSample(buffer, sample("2026-06-16T12:00:37.000Z", 10, 2), 10).buffer;
+    const second = ingestSample(buffer, sample("2026-06-16T12:00:39.000Z", 42, 8), 10);
+    expect(second.buffer.open?.max_jitter_ms).toBe(8);
+    expect(second.buffer.open?.min_jitter_ms).toBe(2);
   });
 });
 
@@ -166,11 +211,12 @@ describe("latencySeriesEqual", () => {
 });
 
 describe("createChartLiveIngest", () => {
-  const sample = (ts: string, latency: number): Sample => ({
+  const sample = (ts: string, latency: number, jitter?: number): Sample => ({
     ts,
     host: "1.1.1.1",
     success: true,
     latency_ms: latency,
+    jitter_ms: jitter,
   });
 
   it("returns pending without a display snapshot while accumulating an open bin", () => {

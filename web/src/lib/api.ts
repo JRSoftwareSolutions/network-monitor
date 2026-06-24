@@ -36,6 +36,9 @@ export interface ChartBucket {
   avg_ms?: number | null;
   min_ms?: number | null;
   max_ms?: number | null;
+  avg_jitter_ms?: number | null;
+  min_jitter_ms?: number | null;
+  max_jitter_ms?: number | null;
   sample_count: number;
 }
 
@@ -66,10 +69,29 @@ export interface LiveMetrics {
   success_count: number;
 }
 
+export interface SpeedTestResult {
+  id?: number;
+  ts: string;
+  download_mbps?: number | null;
+  upload_mbps?: number | null;
+  duration_seconds: number;
+  error?: string | null;
+}
+
+export interface SpeedTestProgress {
+  phase: "download" | "upload";
+  mbps: number;
+}
+
+export interface SpeedTestStatus {
+  running: boolean;
+}
+
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, init);
   if (!res.ok) {
-    throw new Error(`${res.status} ${res.statusText}`);
+    const text = (await res.text()).trim();
+    throw new Error(text || `${res.status} ${res.statusText}`);
   }
   return res.json() as Promise<T>;
 }
@@ -105,4 +127,22 @@ export function putConfig(body: {
       body: JSON.stringify(body),
     },
   );
+}
+
+export function getSpeedTestStatus() {
+  return fetchJson<SpeedTestStatus>("/api/speedtest");
+}
+
+export function runSpeedTest(durationSeconds = 10) {
+  const timeoutMs = (durationSeconds * 2 + 15) * 1000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetchJson<SpeedTestResult>("/api/speedtest", {
+    method: "POST",
+    signal: controller.signal,
+  }).finally(() => clearTimeout(timer));
+}
+
+export function getSpeedTestResults(limit = 50) {
+  return fetchJson<{ results: SpeedTestResult[] }>(`/api/speedtest/results?limit=${limit}`);
 }

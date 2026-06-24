@@ -36,6 +36,15 @@ Edit [`config.yaml`](config.yaml):
 | `listen_port` | HTTP port | `8080` |
 | `data_dir` | Directory for `monitor.db` | `./data` |
 | `thresholds.ping_max`, `thresholds.jitter_max` | Exposed in config; not used in tier classification today | see `config.yaml` |
+| `speedtest.servers` | LibreSpeed mirror base URLs, tried in order until one succeeds | see `config.yaml` |
+| `speedtest.download_path`, `speedtest.upload_path` | Paths relative to each mirror base (`garbage.php`, `empty.php`) | `garbage.php`, `empty.php` |
+| `speedtest.download_url`, `speedtest.upload_url` | Optional explicit endpoints (skips mirror list); use for Cloudflare legacy `__down` / `__up` | unset |
+| `speedtest.duration_seconds` | Seconds per download and upload phase | `10` |
+| `speedtest.parallel_streams` | Concurrent download/upload connections (1–16); use 8+ on gigabit links | `8` |
+
+Speed tests run from the **monitor host** using the LibreSpeed protocol against public mirrors with automatic failover. Set `download_url` and `upload_url` together to override with a custom or Cloudflare endpoint.
+
+Measurement uses a TCP warm-up grace period (1.5 s download, 3 s upload), staggered stream starts, and pipelined download requests. Live progress shows a rolling 1.5 s average; the stored result is steady-state throughput after the grace window.
 
 Each ping attempt times out after **1.5 s** if the target does not respond (not configurable).
 
@@ -61,7 +70,10 @@ Send `Authorization: Bearer your-secret` or `X-Config-Token: your-secret` with s
 | `GET` | `/api/summary?minutes=` | Window aggregates and status tier |
 | `GET` | `/api/samples?minutes=` | Time-bucketed chart series (`buckets`, tier-derived `bucket_seconds`, min/max/avg per bucket) |
 | `GET` | `/api/live` | Rolling 60s window (`last_ts`, `last_success`, avg/min/max latency and jitter, loss %, sample and success counts) |
-| `GET` | `/api/events` | SSE stream (`sample`, `config` events) |
+| `POST` | `/api/speedtest` | On-demand download + upload throughput snapshot (Mbps) from the monitor host; emits `speedtest_progress` SSE events during the run; persists result to SQLite |
+| `GET` | `/api/speedtest` | Whether a speed test is currently running (`running`) |
+| `GET` | `/api/speedtest/results?limit=` | Recent persisted speed test results (newest first, default limit 50, max 500) |
+| `GET` | `/api/events` | SSE stream (`sample`, `config`, `speedtest_progress` events) |
 
 ## Development
 

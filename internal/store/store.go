@@ -22,6 +22,15 @@ type Sample struct {
 	JitterMs  *float64 `json:"jitter_ms,omitempty"`
 }
 
+type SpeedTestResult struct {
+	ID              int64    `json:"id,omitempty"`
+	TS              string   `json:"ts"`
+	DownloadMbps    *float64 `json:"download_mbps,omitempty"`
+	UploadMbps      *float64 `json:"upload_mbps,omitempty"`
+	DurationSeconds int      `json:"duration_seconds"`
+	Error           *string  `json:"error,omitempty"`
+}
+
 type Store struct {
 	db *sql.DB
 }
@@ -60,7 +69,10 @@ func (s *Store) Insert(sample Sample) error {
 
 func (s *Store) Prune(before time.Time) error {
 	cutoff := before.UTC().Format(time.RFC3339Nano)
-	_, err := s.db.Exec(`DELETE FROM samples WHERE ts < ?`, cutoff)
+	if _, err := s.db.Exec(`DELETE FROM samples WHERE ts < ?`, cutoff); err != nil {
+		return err
+	}
+	_, err := s.db.Exec(`DELETE FROM speedtest_results WHERE ts < ?`, cutoff)
 	return err
 }
 
@@ -93,6 +105,56 @@ func (s *Store) QuerySince(since time.Time) ([]Sample, error) {
 			sample.JitterMs = &v
 		}
 		out = append(out, sample)
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) InsertSpeedTestResult(result SpeedTestResult) error {
+	_, err := s.db.Exec(
+		`INSERT INTO speedtest_results (ts, download_mbps, upload_mbps, duration_seconds, error) VALUES (?, ?, ?, ?, ?)`,
+		result.TS, result.DownloadMbps, result.UploadMbps, result.DurationSeconds, result.Error,
+	)
+	return err
+}
+
+func (s *Store) QuerySpeedTestResults(limit int) ([]SpeedTestResult, error) {
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	rows, err := s.db.Query(
+		`SELECT id, ts, download_mbps, upload_mbps, duration_seconds, error
+		 FROM speedtest_results ORDER BY ts DESC LIMIT ?`,
+		limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []SpeedTestResult
+	for rows.Next() {
+		var result SpeedTestResult
+		var download, upload sql.NullFloat64
+		var errText sql.NullString
+		if err := rows.Scan(&result.ID, &result.TS, &download, &upload, &result.DurationSeconds, &errText); err != nil {
+			return nil, err
+		}
+		if download.Valid {
+			v := download.Float64
+			result.DownloadMbps = &v
+		}
+		if upload.Valid {
+			v := upload.Float64
+			result.UploadMbps = &v
+		}
+		if errText.Valid {
+			v := errText.String
+			result.Error = &v
+		}
+		out = append(out, result)
 	}
 	return out, rows.Err()
 }

@@ -26,14 +26,25 @@ type Thresholds struct {
 	LossMax     float64 `json:"loss_max" yaml:"loss_max"`
 }
 
+type SpeedTest struct {
+	Servers         []string `json:"servers" yaml:"servers"`
+	DownloadPath    string   `json:"download_path" yaml:"download_path"`
+	UploadPath      string   `json:"upload_path" yaml:"upload_path"`
+	DownloadURL     string   `json:"download_url" yaml:"download_url"`
+	UploadURL       string   `json:"upload_url" yaml:"upload_url"`
+	DurationSeconds int      `json:"duration_seconds" yaml:"duration_seconds"`
+	ParallelStreams int      `json:"parallel_streams" yaml:"parallel_streams"`
+}
+
 type Config struct {
-	Target              string  `yaml:"target"`
-	PingIntervalSeconds float64 `yaml:"ping_interval_seconds"`
-	RetentionMinutes    int     `yaml:"retention_minutes"`
-	ListenHost          string  `yaml:"listen_host"`
-	ListenPort          int     `yaml:"listen_port"`
-	DataDir             string  `yaml:"data_dir"`
+	Target              string     `yaml:"target"`
+	PingIntervalSeconds float64    `yaml:"ping_interval_seconds"`
+	RetentionMinutes    int        `yaml:"retention_minutes"`
+	ListenHost          string     `yaml:"listen_host"`
+	ListenPort          int        `yaml:"listen_port"`
+	DataDir             string     `yaml:"data_dir"`
 	Thresholds          Thresholds `yaml:"thresholds"`
+	SpeedTest           SpeedTest  `yaml:"speedtest"`
 }
 
 type Manager struct {
@@ -63,6 +74,16 @@ func Default() Config {
 			LossGood:    1,
 			LossOkay:    3,
 			LossMax:     15,
+		},
+		SpeedTest: SpeedTest{
+			Servers: []string{
+				"https://speedtest.selectel.ru/",
+				"https://nyc.speedtest.clouvider.net/backend/",
+				"https://fra.speedtest.clouvider.net/backend/",
+				"https://speedtest.singapore.linode.com/",
+			},
+			DurationSeconds: 10,
+			ParallelStreams: 8,
 		},
 	}
 }
@@ -181,6 +202,27 @@ func (c *Config) Validate() error {
 	}
 	if c.DataDir == "" {
 		c.DataDir = "./data"
+	}
+	if c.SpeedTest.DownloadURL == "" && c.SpeedTest.UploadURL == "" && len(c.SpeedTest.Servers) == 0 {
+		c.SpeedTest.Servers = append([]string(nil), Default().SpeedTest.Servers...)
+	}
+	if c.SpeedTest.DurationSeconds < 1 {
+		c.SpeedTest.DurationSeconds = 10
+	}
+	if c.SpeedTest.DurationSeconds > 60 {
+		return fmt.Errorf("speedtest.duration_seconds must be between 1 and 60")
+	}
+	if c.SpeedTest.ParallelStreams < 1 {
+		c.SpeedTest.ParallelStreams = 8
+	}
+	if c.SpeedTest.ParallelStreams > 16 {
+		return fmt.Errorf("speedtest.parallel_streams must be between 1 and 16")
+	}
+	if c.SpeedTest.DownloadURL == "" && c.SpeedTest.UploadURL == "" && len(c.SpeedTest.Servers) == 0 {
+		return fmt.Errorf("speedtest requires servers or both download_url and upload_url")
+	}
+	if (c.SpeedTest.DownloadURL == "") != (c.SpeedTest.UploadURL == "") {
+		return fmt.Errorf("speedtest.download_url and speedtest.upload_url must both be set when using explicit URLs")
 	}
 	return nil
 }

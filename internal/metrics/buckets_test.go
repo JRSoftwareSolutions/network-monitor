@@ -17,6 +17,18 @@ func sampleAt(ts time.Time, latency float64) store.Sample {
 	}
 }
 
+func sampleAtWithJitter(ts time.Time, latency, jitter float64) store.Sample {
+	lv := latency
+	jv := jitter
+	return store.Sample{
+		TS:        ts.UTC().Format(time.RFC3339Nano),
+		Host:      "1.1.1.1",
+		Success:   true,
+		LatencyMs: &lv,
+		JitterMs:  &jv,
+	}
+}
+
 func failedAt(ts time.Time) store.Sample {
 	return store.Sample{
 		TS:      ts.UTC().Format(time.RFC3339Nano),
@@ -102,8 +114,54 @@ func TestAggregateBucketsAllFailed(t *testing.T) {
 	if out[0].AvgMs != nil || out[0].MinMs != nil || out[0].MaxMs != nil {
 		t.Fatalf("expected null latencies, got %+v", out[0])
 	}
+	if out[0].AvgJitterMs != nil || out[0].MinJitterMs != nil || out[0].MaxJitterMs != nil {
+		t.Fatalf("expected null jitter, got %+v", out[0])
+	}
 	if out[0].SampleCount != 1 {
 		t.Fatalf("sample_count=%d", out[0].SampleCount)
+	}
+}
+
+func TestAggregateBucketsJitterSingleSample(t *testing.T) {
+	start := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+	samples := []store.Sample{
+		sampleAtWithJitter(start, 50, 5),
+	}
+	out := AggregateBuckets(samples, start, 1)
+	if len(out) != 1 {
+		t.Fatalf("len=%d want 1", len(out))
+	}
+	if out[0].AvgJitterMs == nil || *out[0].AvgJitterMs != 5 {
+		t.Fatalf("avg jitter=%v", out[0].AvgJitterMs)
+	}
+	if out[0].MinJitterMs == nil || *out[0].MinJitterMs != 5 {
+		t.Fatalf("min jitter=%v", out[0].MinJitterMs)
+	}
+	if out[0].MaxJitterMs == nil || *out[0].MaxJitterMs != 5 {
+		t.Fatalf("max jitter=%v", out[0].MaxJitterMs)
+	}
+}
+
+func TestAggregateBucketsJitterMinMaxAvg(t *testing.T) {
+	start := time.Date(2026, 6, 16, 12, 0, 0, 0, time.UTC)
+	samples := []store.Sample{
+		sampleAtWithJitter(start, 50, 2),
+		sampleAtWithJitter(start.Add(200*time.Millisecond), 52, 8),
+		sampleAtWithJitter(start.Add(400*time.Millisecond), 48, 4),
+	}
+	out := AggregateBuckets(samples, start, 1)
+	if len(out) != 1 {
+		t.Fatalf("len=%d want 1", len(out))
+	}
+	if out[0].MinJitterMs == nil || *out[0].MinJitterMs != 2 {
+		t.Fatalf("min jitter=%v", out[0].MinJitterMs)
+	}
+	if out[0].MaxJitterMs == nil || *out[0].MaxJitterMs != 8 {
+		t.Fatalf("max jitter=%v", out[0].MaxJitterMs)
+	}
+	wantAvg := round2((2 + 8 + 4) / 3.0)
+	if out[0].AvgJitterMs == nil || *out[0].AvgJitterMs != wantAvg {
+		t.Fatalf("avg jitter=%v want %v", out[0].AvgJitterMs, wantAvg)
 	}
 }
 
