@@ -1,0 +1,72 @@
+---
+description: CSS and styling conventions — tokens, layers, scoped Svelte styles
+globs: web/src/**
+---
+
+# Styling conventions
+
+## Tokens first
+
+Never hardcode colors or spacing in components. Use semantic tokens (`var(--color-*)`, `var(--space-*)`, etc.). Add a semantic token in `web/src/styles/tokens/semantic.css` if one does not exist.
+
+Primitive palette values (`--palette-*`) live only in `primitives.css`. Components must not reference `--palette-*` directly.
+
+## File layout
+
+| Location | Purpose |
+|----------|---------|
+| `web/src/styles/tokens/` | Primitives, semantic aliases, theme files |
+| `web/src/styles/layers/` | Reset, base, layout modes, shared component rules |
+| `web/src/styles/index.css` | `@layer` declaration and ordered imports |
+| Component `<style>` blocks | Layout and component-specific rules |
+
+## Scoped by default
+
+New component layout goes in that component's scoped `<style>` block. Promote rules to `layers/components.css` only when reused in two or more components.
+
+## State and tests
+
+Use `data-*` attributes for visual state (`data-status`, `data-state`), not dynamic class strings. Preserve stable hooks used by e2e: `.pill[data-state]`, `.window-select select`, `getByRole` headings.
+
+## Charts and canvas
+
+Read colors and dimensions from `web/src/lib/theme.ts` (`chartTheme(el)`, `cssVar(name, el)`). Chart height comes from the container’s laid-out size (`clientHeight`), with `--layout-chart-min-height` as a floor. Pass the chart container element so sizing reflects the active grid cell. Chart envelope uses `--color-chart-envelope` and `--color-chart-envelope-fill`. Do not hardcode hex or pixel heights in chart code.
+
+## Responsive layout modes
+
+Three modes driven by **container queries on `.page-shell`** (see `web/src/styles/layers/layout.css`):
+
+| Mode | Detection | Dashboard |
+|------|-----------|-----------|
+| **Vertical** | Container width ≤ `--breakpoint-md` | Single column stack |
+| **Normal** | Default | Connection \| Live (1/2 each), chart full width below (2/3 row) |
+| **Ultrawide** | Container width ≥ `--breakpoint-ultrawide-min` | 1/3 column: connection (1/3 h) + live (2/3 h); 2/3 column: chart (full h) |
+
+Rules for new UI:
+
+- Do **not** add component-level `@media` for dashboard layout; override `--layout-*` tokens in `layout.css` instead.
+- Consume `var(--layout-*)` for grids, gaps, and column counts (`--layout-metrics-columns`, `--layout-stat-columns`, etc.).
+- New dashboard panels use the fractional grid API (see below).
+- Threshold tokens live in `primitives.css` (`--breakpoint-md`, `--breakpoint-ultrawide-min`); use them in `@container page` rules where supported (`max-width` accepts `var()`).
+- `min-width` container queries and `@media` cannot use `var()` in Chromium — use the matching literal value in `layout.css` (e.g. `1468px` for ultrawide) and keep the token in `primitives.css` as the source of truth.
+
+## Fractional panel layout
+
+The dashboard uses a **6-column × N-row** CSS grid. Spans use grid line fractions (e.g. `1 / 4` = half width, `1 / 3` = one third).
+
+| Span | Columns (of 6) |
+|------|----------------|
+| 1/3 | 2 (`1 / 3`) |
+| 1/2 | 3 (`1 / 4` or `4 / 7`) |
+| 2/3 | 4 (`3 / 7`) |
+| full | 6 (`1 / 7`) |
+
+Row tracks use `minmax(min-content, Nfr)` so content sets the floor and extra space distributes in ratio.
+
+**Adding a panel:**
+
+1. Root element: `class="dashboard-panel …"` (see `components.css`).
+2. In `layout.css`, set `--layout-panel-<id>-col` and `--layout-panel-<id>-row` on `.page` for each layout mode.
+3. Add a placement rule: `.panel-class { grid-column: var(--layout-panel-<id>-col); grid-row: var(--layout-panel-<id>-row); }`
+4. No external margins on panels — only `--layout-gap` on `.dashboard-grid`.
+5. Cards and chart areas fill their cell (`height: 100%`, flex column); charts use `--layout-chart-min-height`, not fixed pixel heights.

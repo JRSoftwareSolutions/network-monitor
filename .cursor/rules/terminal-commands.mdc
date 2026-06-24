@@ -15,7 +15,7 @@ This project runs on Windows PowerShell. Agents often hang integrated terminals 
 - Local health check:
 
 ```powershell
-curl.exe -sf --max-time 2 http://127.0.0.1:8080/api/config
+curl.exe -sf --max-time 2 http://127.0.0.1:8080/api/health
 ```
 
 - Before probing localhost, confirm the server is running (or use `start.bat`, which waits up to 30s).

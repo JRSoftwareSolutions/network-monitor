@@ -1,0 +1,12 @@
+body {
+  margin: 0;
+  background: radial-gradient(circle at top, var(--gradient-bg-top) 0%, var(--color-bg) 45%);
+  color: var(--color-text);
+  min-height: 100vh;
+}
+
+button,
+select,
+input {
+  font: inherit;
+}

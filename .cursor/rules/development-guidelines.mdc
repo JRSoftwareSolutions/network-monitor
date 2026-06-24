@@ -1,0 +1,55 @@
+---
+description: Network Monitor development conventions — layers, API sync, tests, dependencies
+alwaysApply: true
+---
+
+# Development guidelines
+
+Network Monitor is a single-binary Go app (collector + SQLite + REST/SSE + embedded Svelte SPA). Follow these rules for all code changes.
+
+## Layer boundaries
+
+Data flows in one direction: **collector → store → metrics → api → frontend**.
+
+| Put it here | Not here |
+|-------------|----------|
+| Ping loop, sample creation (`internal/collector`) | HTTP, UI |
+| SQLite I/O, schema (`internal/store`) | Status tiers, HTTP |
+| Aggregations, status classification (`internal/metrics`) | SQL, HTTP |
+| Routes, handlers, SSE, embed (`internal/api`) | Ping parsing, SQL |
+| API client, pure helpers (`web/src/lib`, e.g. `api.ts`, `windows.ts`, `status.ts`, `charts.ts`, `time.ts`, `sse.ts`) | DOM, chart rendering |
+| UI components (`web/src/components`) | `fetch`, metric math |
+
+New features land in the correct layer first. If logic is needed in two places, extract to `metrics` or `web/src/lib` — never duplicate across Go and TypeScript.
+
+## API contract sync
+
+- Every JSON shape is defined in Go (with `json` tags) **and** mirrored in `web/src/lib/api.ts`.
+- API changes must update **both** in the same change.
+- Prefer additive fields over breaking renames.
+- SSE events use `{ type, data }` — do not invent a second envelope.
+- Update README API table when adding or changing endpoints.
+
+## Test before merge
+
+Run `npm test` from the repo root (Go + Vitest + Playwright) before considering work done.
+
+Add tests for parsing, math, store queries, handlers, and pure TS helpers. Add regression tests when fixing bugs. Do not add tests that only assert mocks or trivial getters.
+
+## Dependencies
+
+Every new dependency needs a one-line justification.
+
+Prefer: Go stdlib, Svelte 5 runes, pure functions, uPlot for charts.
+Avoid without strong reason: HTTP frameworks, ORMs, global state libraries, heavy UI/chart libraries.
+
+## Prefer existing patterns
+
+- State in `App.svelte` via runes; components receive props and emit events.
+- Window definitions: `DASHBOARD_METRICS` in `web/src/lib/windows.ts`.
+- Config in `config.yaml`; secrets via `CONFIG_TOKEN` env only.
+- Schema in `internal/store/schema.sql` with forward-only migrations in `store.go`.
+- Errors: Go returns up and logs at boundaries; `fetchJson` throws on non-2xx; SSE reconnect stays in `sse.ts`.
+- Small focused diffs; one intent per PR; no drive-by formatting.
+
+See [CONTRIBUTING.md](../../CONTRIBUTING.md) and [docs/ARCHITECTURE.md](../../docs/ARCHITECTURE.md) for full detail.

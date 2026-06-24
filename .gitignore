@@ -1,12 +1,7 @@
 node_modules/
+web/node_modules/
 test-results/
-logs/
-screenshots/
-__pycache__/
-.pytest_cache/
-*.py[cod]
-.venv/
-venv/
-.env
-build/
+data/
+bin/
 dist/
+.env

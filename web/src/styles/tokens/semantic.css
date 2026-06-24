@@ -1,0 +1,26 @@
+:root {
+  --color-bg: var(--palette-slate-900);
+  --color-surface: var(--palette-slate-850);
+  --color-border: var(--palette-slate-700);
+  --color-text: var(--palette-slate-200);
+  --color-text-muted: var(--palette-slate-400);
+  --color-accent: var(--palette-sky-400);
+  --color-on-accent: var(--palette-slate-950);
+  --color-status-great: var(--palette-green-500);
+  --color-status-ok: var(--palette-yellow-500);
+  --color-status-poor: var(--palette-orange-500);
+  --color-status-offline: var(--palette-red-500);
+  --gradient-quality-bar: linear-gradient(
+    to right,
+    var(--color-status-great),
+    var(--color-status-ok),
+    var(--color-status-poor),
+    var(--color-status-offline)
+  );
+  --color-quality-needle: color-mix(in srgb, var(--color-text) 70%, var(--color-text-muted));
+  --color-chart-series: var(--color-accent);
+  --color-chart-envelope: var(--palette-slate-500);
+  --color-chart-envelope-fill: color-mix(in srgb, var(--palette-sky-400) 12%, transparent);
+  --chart-line-width: 1;
+  --gradient-bg-top: var(--palette-blue-950);
+}
